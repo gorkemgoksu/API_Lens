@@ -1,0 +1,196 @@
+{
+  "drop_table": {
+    "by_library": {
+      "matplotlib": {
+        "R1": 246,
+        "R2": 98,
+        "R3": 52,
+        "R4": 4,
+        "R5": 547,
+        "R6": 4104,
+        "R7": 158,
+        "R8": 752
+      },
+      "numpy": {
+        "R1": 255,
+        "R2": 398,
+        "R3": 1,
+        "R4": 8,
+        "R5": 1419,
+        "R6": 2151,
+        "R7": 978,
+        "R8": 801
+      },
+      "pandas": {
+        "R1": 597,
+        "R2": 7116,
+        "R3": 22,
+        "R4": 0,
+        "R5": 2958,
+        "R6": 1797,
+        "R7": 169,
+        "R8": 423
+      },
+      "pytorch": {
+        "R1": 129,
+        "R2": 355,
+        "R3": 0,
+        "R4": 1,
+        "R5": 106,
+        "R6": 529,
+        "R7": 17,
+        "R8": 308
+      },
+      "scikit-learn": {
+        "R1": 2931,
+        "R2": 45,
+        "R3": 0,
+        "R4": 0,
+        "R5": 247,
+        "R6": 2720,
+        "R7": 64,
+        "R8": 465
+      },
+      "scipy": {
+        "R1": 1412,
+        "R2": 686,
+        "R3": 1,
+        "R4": 1,
+        "R5": 884,
+        "R6": 3048,
+        "R7": 349,
+        "R8": 1069
+      }
+    },
+    "by_rule": {
+      "R1": 5570,
+      "R2": 8698,
+      "R3": 76,
+      "R4": 14,
+      "R5": 6161,
+      "R6": 14349,
+      "R7": 1735,
+      "R8": 3818
+    }
+  },
+  "entity_length_histogram": {
+    "1": 3539,
+    "11": 10,
+    "12": 1,
+    "14": 1,
+    "16": 2,
+    "17": 1,
+    "2": 35,
+    "3": 3578,
+    "30": 1,
+    "4": 12,
+    "5": 2817,
+    "6": 4,
+    "7": 602,
+    "8": 1,
+    "9": 145
+  },
+  "entity_types": {
+    "ATTRIBUTE": 721,
+    "CLASS": 3977,
+    "EXCEPTION": 108,
+    "FUNCTION": 3300,
+    "METHOD": 1992,
+    "MODULE": 651
+  },
+  "libraries": {
+    "matplotlib": {
+      "entities": 2217,
+      "sentences": 1924,
+      "tokens": 39504
+    },
+    "numpy": {
+      "entities": 1261,
+      "sentences": 1109,
+      "tokens": 23223
+    },
+    "pandas": {
+      "entities": 1306,
+      "sentences": 1123,
+      "tokens": 23701
+    },
+    "pytorch": {
+      "entities": 678,
+      "sentences": 600,
+      "tokens": 15131
+    },
+    "scikit-learn": {
+      "entities": 2973,
+      "sentences": 2778,
+      "tokens": 58288
+    },
+    "scipy": {
+      "entities": 2314,
+      "sentences": 2314,
+      "tokens": 43714
+    }
+  },
+  "schema_version": 1,
+  "seed": 42,
+  "shared_doc_paths": 0,
+  "source_types": {
+    "changelog": {
+      "entities": 4383,
+      "sentences": 4085,
+      "tokens": 79070
+    },
+    "guide": {
+      "entities": 771,
+      "sentences": 797,
+      "tokens": 16965
+    },
+    "reference": {
+      "entities": 4719,
+      "sentences": 4194,
+      "tokens": 91679
+    },
+    "tutorial": {
+      "entities": 876,
+      "sentences": 772,
+      "tokens": 15847
+    }
+  },
+  "splits": {
+    "dev": {
+      "entities": 835,
+      "sentences": 879,
+      "tokens": 16350
+    },
+    "heldout": {
+      "entities": 678,
+      "sentences": 600,
+      "tokens": 15131
+    },
+    "test": {
+      "entities": 1141,
+      "sentences": 1096,
+      "tokens": 22148
+    },
+    "test_noparen": {
+      "entities": 1141,
+      "sentences": 1096,
+      "tokens": 21566
+    },
+    "train": {
+      "entities": 8095,
+      "sentences": 7273,
+      "tokens": 149932
+    }
+  },
+  "test_target_mentions": 1141,
+  "test_unseen_target_mentions": 260,
+  "test_unseen_target_share": 0.22787028921998248,
+  "zero_entity_unsampled": {
+    "matplotlib": 22478,
+    "numpy": 13738,
+    "pandas": 9756,
+    "pytorch": 7526,
+    "scikit-learn": 8722,
+    "scipy": 20065
+  }
+}

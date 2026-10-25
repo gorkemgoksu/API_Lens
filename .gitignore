@@ -1,0 +1,27 @@
+# Local project instructions and working prompts (never commit)
+CLAUDE.md
+PROMPTS.md
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Model artifacts and local tooling
+checkpoints/
+*.pt
+*.bin
+.ipynb_checkpoints/
+
+# Operating system files
+.DS_Store
+Thumbs.db

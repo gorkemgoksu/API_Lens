@@ -1,0 +1,2 @@
+# Preserve upstream bytes so recorded SHA-256 checksums remain portable.
+data/raw/** -text

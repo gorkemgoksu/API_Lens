@@ -1,0 +1,89 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "commit": "a3d0ef1df045b858e68115001fdabc930bb3b68c",
+      "conf_path": "doc/source/conf.py",
+      "default_role": "autolink",
+      "docs_subdir": "doc/source",
+      "inventory_objects": 8274,
+      "inventory_url": "https://numpy.org/doc/2.5/objects.inv",
+      "library": "numpy",
+      "license_path": "LICENSE.txt",
+      "repository": "https://github.com/numpy/numpy.git",
+      "tag": "v2.5.4"
+    },
+    {
+      "commit": "54ef5423f2e4376230ec3bfda6912a07a50958e3",
+      "conf_path": "doc/source/conf.py",
+      "default_role": "autolink",
+      "docs_subdir": "doc/source",
+      "inventory_objects": 11924,
+      "inventory_url": "https://docs.scipy.org/doc/scipy-1.18.0/objects.inv",
+      "library": "scipy",
+      "license_path": "LICENSE.txt",
+      "repository": "https://github.com/scipy/scipy.git",
+      "tag": "v1.18.0"
+    },
+    {
+      "commit": "c6f46769b808eb60218189d089dd67841b44f1b9",
+      "conf_path": "doc/source/conf.py",
+      "default_role": null,
+      "docs_subdir": "doc/source",
+      "inventory_objects": 13522,
+      "inventory_url": "https://pandas.pydata.org/pandas-docs/version/3.1/objects.inv",
+      "library": "pandas",
+      "license_path": "LICENSE",
+      "repository": "https://github.com/pandas-dev/pandas.git",
+      "tag": "v3.1.0"
+    },
+    {
+      "commit": "866c0f51e7560ef0303cbcc5f159df5382ea9e3f",
+      "conf_path": "doc/conf.py",
+      "default_role": "literal",
+      "docs_subdir": "doc",
+      "inventory_objects": 6220,
+      "inventory_url": "https://scikit-learn.org/1.9/objects.inv",
+      "library": "scikit-learn",
+      "license_path": "COPYING",
+      "repository": "https://github.com/scikit-learn/scikit-learn.git",
+      "tag": "1.9.1"
+    },
+    {
+      "commit": "d3ca9172e392048ec242b90e8423e88d1a3000b2",
+      "conf_path": "doc/conf.py",
+      "default_role": "obj",
+      "docs_subdir": "doc",
+      "inventory_objects": 11401,
+      "inventory_url": "https://matplotlib.org/3.11.2/objects.inv",
+      "library": "matplotlib",
+      "license_path": "LICENSE/LICENSE",
+      "repository": "https://github.com/matplotlib/matplotlib.git",
+      "tag": "v3.11.2"
+    },
+    {
+      "commit": "5c4886908584029761b579af026dcfb627c84070",
+      "conf_path": "docs/source/conf.py",
+      "default_role": null,
+      "docs_subdir": "docs/source",
+      "inventory_objects": 18010,
+      "inventory_url": "https://docs.pytorch.org/docs/2.14/objects.inv",
+      "library": "pytorch",
+      "license_path": "LICENSE",
+      "repository": "https://github.com/pytorch/pytorch.git",
+      "tag": "v2.14.1"
+    },
+    {
+      "commit": null,
+      "conf_path": null,
+      "default_role": null,
+      "docs_subdir": null,
+      "inventory_objects": 20473,
+      "inventory_url": "https://docs.python.org/3.15/objects.inv",
+      "library": "python",
+      "license_path": null,
+      "repository": null,
+      "tag": "3.15"
+    }
+  ]
+}
