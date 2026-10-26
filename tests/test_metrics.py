@@ -96,3 +96,54 @@ def test_writers_follow_contract(tmp_path, monkeypatch):
         metrics.write_result("hmm", 0, {}, {"lr": 1})
     with pytest.raises(ValueError, match="ids"):
         metrics.write_preds("hmm", 0, "dev", ["a"], PRED)
+
+
+RECORDS = [
+    {"id": "s0", "library": "numpy", "source_type": "guide", "tokens": ["a"] * 4,
+     "spans": [{"start": 0, "end": 2, "type": "FUNCTION", "target": "f"},
+               {"start": 3, "end": 4, "type": "CLASS", "target": "C"}]},
+    {"id": "s1", "library": "pandas", "source_type": "reference", "tokens": ["a"] * 4,
+     "spans": [{"start": 0, "end": 3, "type": "METHOD", "target": "m"}]},
+    {"id": "s2", "library": "pandas", "source_type": "guide", "tokens": ["a"] * 4,
+     "spans": [{"start": 1, "end": 2, "type": "ATTRIBUTE", "target": "a"}]},
+]
+
+
+def test_slices_by_library_and_target():
+    s = metrics.slices(RECORDS, GOLD, PRED, train_targets={"f", "m"})
+    assert s["by_library"]["numpy"]["macro_f1"] == 1.0   # sentence A only
+    assert s["by_library"]["pandas"]["macro_f1"] == 0.0  # sentences B and C both wrong
+    assert set(s["by_source_type"]) == {"guide", "reference"}
+    # seen targets f, m: f recalled, m not -> 1/2; unseen C recalled, a not -> 1/2
+    assert s["target_recall"]["seen"] == {"recall": 0.5, "support": 2}
+    assert s["target_recall"]["unseen"] == {"recall": 0.5, "support": 2}
+
+
+def test_bootstrap_ci_perfect_and_deterministic():
+    assert metrics.bootstrap_ci(GOLD, GOLD, n=50)["macro_f1"] == [1.0, 1.0]
+    a, b = metrics.bootstrap_ci(GOLD, PRED, n=200), metrics.bootstrap_ci(GOLD, PRED, n=200)
+    assert a == b
+    low, high = a["micro_f1"]
+    assert 0.0 <= low <= 0.5 <= high <= 1.0  # point estimate (0.5) lies inside the interval
+
+
+def test_bootstrap_uses_summed_counts():
+    # One resample made only of sentence A has F1 1.0; the full-data micro F1 must be 0.5.
+    counts = metrics._sentence_counts(GOLD, PRED)
+    tp, n_pred, n_gold = counts.sum(axis=0)
+    assert metrics._f1_from_counts(tp, n_pred, n_gold)[0] == pytest.approx(0.5)
+
+
+def test_validate_preds_reorders_and_rejects():
+    rows = [{"id": r["id"], "pred": p} for r, p in zip(RECORDS, PRED)]
+    assert metrics.validate_preds(RECORDS, rows[::-1]) == PRED
+    with pytest.raises(ValueError, match="no prediction"):
+        metrics.validate_preds(RECORDS, rows[:2])
+    with pytest.raises(ValueError, match="not in the split"):
+        metrics.validate_preds(RECORDS, rows + [{"id": "zzz", "pred": []}])
+    with pytest.raises(ValueError, match="duplicate"):
+        metrics.validate_preds(RECORDS, rows + rows[:1])
+    with pytest.raises(ValueError, match="tags for"):
+        metrics.validate_preds(RECORDS, [{"id": "s0", "pred": ["O"]}, *rows[1:]])
+    with pytest.raises(ValueError, match="unknown labels"):
+        metrics.validate_preds(RECORDS, [{"id": "s0", "pred": ["X"] * 4}, *rows[1:]])
