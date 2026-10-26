@@ -297,7 +297,7 @@ def run_final(
         write_preds(name, args.seed, split, [record["id"] for record in records], predictions)
         splits[split] = evaluate([record["tags"] for record in records], predictions)
         print(f"{split}: macro-F1 {splits[split]['macro_f1']:.4f}")
-    write_result({"model": name, "seed": args.seed, **run_info, "splits": splits})
+    write_result(name, args.seed, splits, run_info)
     CHECKPOINT_DIR.mkdir(exist_ok=True)
     checkpoint = {"config": run_info["config"], "words": words, "chars": chars, "state_dict": model.state_dict()}
     torch.save(checkpoint, CHECKPOINT_DIR / f"{name}_seed{args.seed}.pt")
