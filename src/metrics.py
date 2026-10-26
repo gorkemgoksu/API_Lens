@@ -3,6 +3,8 @@
 Entities are parsed with seqeval's strict IOB2 scheme: a span exists only if it starts
 with B-X and continues with I-X. A stray I-X (after O or after another type) is not an
 entity, so a prediction counts only when boundaries and type both match the gold span.
+Macro-F1 averages only over the entity types that occur in the gold labels of the evaluated
+split; a type with no gold example is excluded, not scored 0.
 """
 
 from __future__ import annotations
@@ -12,6 +14,7 @@ import json
 from pathlib import Path
 from typing import Any, Sequence
 
+import numpy as np
 from seqeval.scheme import IOB2, Entities
 
 try:  # works both as ``python src/metrics.py`` and as ``from src import metrics``
@@ -131,6 +134,105 @@ def evaluate(gold: Tags, pred: Tags) -> dict[str, Any]:
         "n_gold_entities": len(gold_ents),
         "n_pred_entities": len(pred_ents),
     }
+
+
+def slices(records: Sequence[dict[str, Any]], gold: Tags, pred: Tags,
+           train_targets: set[str]) -> dict[str, Any]:
+    """Break results down by library, by source_type and by seen/unseen entity target.
+
+    ``records`` are the split records (same order as gold/pred); ``train_targets`` is the set of
+    span targets that occur in train. Returns {"by_library", "by_source_type"} (full evaluate()
+    output on each sentence subset) and "target_recall": recall on gold spans whose target is
+    unseen in train vs. seen.
+
+    Only recall is reported for seen/unseen: a predicted span carries no target string, so a
+    false positive cannot be assigned to "seen" or "unseen"; precision would be undefined.
+    """
+    if not len(records) == len(gold) == len(pred):
+        raise ValueError("records, gold and pred must have the same number of sentences")
+    out: dict[str, Any] = {}
+    for name, field in (("by_library", "library"), ("by_source_type", "source_type")):
+        groups: dict[str, list[int]] = {}
+        for i, record in enumerate(records):
+            groups.setdefault(record[field], []).append(i)
+        out[name] = {key: evaluate([gold[i] for i in idx], [pred[i] for i in idx])
+                     for key, idx in sorted(groups.items())}
+    found = entity_set(pred)
+    hits = {"seen": [0, 0], "unseen": [0, 0]}  # [recalled, total]
+    for i, record in enumerate(records):
+        for span in record["spans"]:
+            group = "seen" if span["target"] in train_targets else "unseen"
+            hits[group][1] += 1
+            hits[group][0] += (i, span["type"], span["start"], span["end"]) in found
+    out["target_recall"] = {k: {"recall": h / n if n else 0.0, "support": n}
+                            for k, (h, n) in hits.items()}
+    return out
+
+
+def _sentence_counts(gold: Tags, pred: Tags) -> np.ndarray:
+    """Per-sentence [tp, n_pred, n_gold] for every entity type, shape (N, 3, 6)."""
+    counts = np.zeros((len(gold), 3, len(ENTITY_TYPES)), dtype=np.int64)
+    gold_ents, pred_ents = entity_set(gold), entity_set(pred)
+    for column, ents in ((0, gold_ents & pred_ents), (1, pred_ents), (2, gold_ents)):
+        for sent, etype, _, _ in ents:
+            counts[sent, column, ENTITY_TYPES.index(etype)] += 1
+    return counts
+
+
+def _f1_from_counts(tp: np.ndarray, n_pred: np.ndarray, n_gold: np.ndarray) -> tuple[float, float]:
+    """(micro_f1, macro_f1) from per-type summed counts; macro skips types absent from gold."""
+    def f1(t: float, p: float, g: float) -> float:
+        return 2 * t / (p + g) if p + g else 0.0  # equals 2PR/(P+R)
+    micro = f1(tp.sum(), n_pred.sum(), n_gold.sum())
+    present = n_gold > 0
+    macro = float(np.mean([f1(t, p, g) for t, p, g in
+                           zip(tp[present], n_pred[present], n_gold[present])])) if present.any() else 0.0
+    return micro, macro
+
+
+def bootstrap_ci(gold: Tags, pred: Tags, n: int = 1000, seed: int = 0) -> dict[str, list[float]]:
+    """95% bootstrap confidence intervals for micro and macro F1, resampling sentences.
+
+    Each resample draws N sentences with replacement, sums their entity counts and recomputes
+    F1 from the summed counts (not the mean of per-sentence F1, which would weight a one-entity
+    sentence like a thirty-entity one). Returns {"micro_f1": [low, high], "macro_f1": [...]}.
+    """
+    _check_inputs(gold, pred)
+    counts = _sentence_counts(gold, pred)
+    rng = np.random.default_rng(seed)
+    scores = np.zeros((n, 2))
+    for b in range(n):
+        weights = np.bincount(rng.integers(0, len(gold), len(gold)), minlength=len(gold))
+        tp, n_pred, n_gold = np.tensordot(weights, counts, axes=(0, 0))
+        scores[b] = _f1_from_counts(tp, n_pred, n_gold)
+    low, high = np.percentile(scores, [2.5, 97.5], axis=0)
+    return {"micro_f1": [float(low[0]), float(high[0])],
+            "macro_f1": [float(low[1]), float(high[1])]}
+
+
+def validate_preds(split: Sequence[dict[str, Any]],
+                   preds: Sequence[dict[str, Any]]) -> list[list[str]]:
+    """Check prediction rows ({"id", "pred"}) against the split records; return tags in split order.
+
+    Raises ValueError for duplicate, missing or extra ids, length mismatches and unknown labels.
+    """
+    by_id: dict[str, list[str]] = {}
+    for row in preds:
+        if row["id"] in by_id:
+            raise ValueError(f"duplicate prediction id: {row['id']}")
+        by_id[row["id"]] = row["pred"]
+    split_ids = {record["id"] for record in split}
+    if missing := split_ids - by_id.keys():
+        raise ValueError(f"{len(missing)} split ids have no prediction, e.g. {sorted(missing)[:3]}")
+    if extra := by_id.keys() - split_ids:
+        raise ValueError(f"{len(extra)} predicted ids are not in the split, e.g. {sorted(extra)[:3]}")
+    ordered = [by_id[record["id"]] for record in split]
+    for record, tags in zip(split, ordered):
+        if len(tags) != len(record["tokens"]):
+            raise ValueError(f"{record['id']}: {len(tags)} tags for {len(record['tokens'])} tokens")
+        if unknown := {t for t in tags if t not in LABELS}:
+            raise ValueError(f"{record['id']}: unknown labels {sorted(unknown)}")
+    return ordered
 
 
 def write_preds(model: str, seed: int, split: str, ids: Sequence[str],
