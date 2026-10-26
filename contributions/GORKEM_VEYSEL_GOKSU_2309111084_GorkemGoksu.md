@@ -23,6 +23,10 @@
 - Entity totals are ATTRIBUTE 721, CLASS 3,977, EXCEPTION 108, FUNCTION 3,300, METHOD 1,992, and MODULE 651 (`stats.json -> entity_types`).
 - Shared document paths across splits: 0 (`stats.json -> shared_doc_paths`).
 
+## One-sentence presentation finding
+
+APILens deterministically turns version-pinned documentation into 9,848 leak-free sentences with 10,749 objectively typed API mentions, while reserving PyTorch as an unseen-library evaluation set (`stats.json -> splits`, `entity_types`, and `shared_doc_paths`).
+
 ## How I verified the work
 
 - Ran the current `main` test suite: 86 tests passed.
