@@ -19,6 +19,7 @@ from scripts.build_dataset import (
     has_markup_residue,
     make_test_noparen,
     normalize_candidate_target,
+    parse_badge_substitutions,
     render_inline,
     resolve_candidate,
     resolve_paragraph,
@@ -110,6 +111,22 @@ Use :class:`DataFrame` here.
     assert paragraphs[0].text == "Use DataFrame here."
 
 
+def test_jinja_header_sets_current_module_or_raises_without_one() -> None:
+    source = "{{ header }}\n\nUse :class:`DataFrame` here."
+    with pytest.raises(ValueError, match="header.*currentmodule"):
+        extract_document("pandas", "doc/source/user_guide/a.rst", source, None)
+
+    paragraph = extract_document(
+        "pandas",
+        "doc/source/user_guide/a.rst",
+        source,
+        None,
+        header_current_module="pandas",
+    )[0]
+    assert paragraph.current_module == "pandas"
+    assert paragraph.text == "Use DataFrame here."
+
+
 def test_myst_current_module_is_tracked() -> None:
     source = """```{py:currentmodule} numpy.linalg
 ```
@@ -164,6 +181,25 @@ Visible prose.
 """
     paragraphs = extract_document("numpy", "doc/source/reference/a.rst", source, None)
     assert [paragraph.text for paragraph in paragraphs] == ["Visible prose."]
+
+
+def test_raw_html_badge_substitution_renders_visible_label() -> None:
+    source = """.. |Fix| replace:: :raw-html:`<span class="badge text-bg-danger">Fix</span>`
+
+This |Fix| entry corrects the documented behavior.
+"""
+    substitutions = parse_badge_substitutions(source)
+    paragraphs = extract_document(
+        "scikit-learn",
+        "doc/whats_new/v1.9.rst",
+        source,
+        None,
+        substitutions=substitutions,
+    )
+    assert substitutions == {"Fix": "Fix"}
+    assert [paragraph.text for paragraph in paragraphs] == [
+        "This Fix entry corrects the documented behavior."
+    ]
 
 
 def test_markdown_heading_is_skipped() -> None:

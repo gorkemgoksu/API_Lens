@@ -29,10 +29,13 @@ URLs recorded in `SOURCES.json`; `data/raw/checksums.txt` covers every raw file.
    records resolved commits and inventory metadata, and writes checksums.
 2. `scripts/build_dataset.py` reads reStructuredText and MyST sources, skips
    code, prompts, directives, tables, comments, and navigation structures, and
-   classifies each document as guide, tutorial, reference, or changelog.
+   classifies each document as guide, tutorial, reference, or changelog. A
+   library's `{{ header }}` line applies the `currentmodule` declared by its
+   configured `conf.py` header; other Jinja lines remain skipped.
 3. Inline roles are rendered as a reader sees them while their exact character
-   offsets, role, and target are retained. Function and method display text may
-   include terminal parentheses.
+   offsets, role, and target are retained. Raw-HTML badge substitutions render
+   as their visible label, while unknown substitutions remain R1 markup
+   residue. Function and method display text may include terminal parentheses.
 4. Each candidate is resolved against the combined Python object inventories.
    Exact names are preferred, then the active module, then a unique qualified
    suffix. The inventory's Python object role determines FUNCTION, METHOD,
@@ -57,14 +60,14 @@ URLs recorded in `SOURCES.json`; `data/raw/checksums.txt` covers every raw file.
 
 The totals below come from `data/processed/stats.json`:
 
-- R1, residual reStructuredText or MyST markup: 5,570.
-- R2, at least one unresolved role target: 8,698.
-- R3, at least one ambiguously resolved role target: 76.
-- R4, token alignment failure or overlapping entity spans: 14.
-- R5, an inventory API appears in literal markup without an API role: 6,161.
-- R6, fewer than 5 or more than 60 tokens: 14,349.
-- R7, alphabetic-character share below 0.5: 1,735.
-- R8, duplicate normalized sentence text: 3,818.
+- R1, residual reStructuredText or MyST markup: 3,163.
+- R2, at least one unresolved role target: 3,119.
+- R3, at least one ambiguously resolved role target: 84.
+- R4, token alignment failure or overlapping entity spans: 16.
+- R5, an inventory API appears in literal markup without an API role: 7,919.
+- R6, fewer than 5 or more than 60 tokens: 14,492.
+- R7, alphabetic-character share below 0.5: 1,736.
+- R8, duplicate normalized sentence text: 3,863.
 
 ## Splits and `test_noparen`
 
