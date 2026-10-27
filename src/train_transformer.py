@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import os
 import sys
 import time
 from pathlib import Path
@@ -27,6 +28,8 @@ from src.viterbi import bio_allowed
 ENCODER = "answerdotai/ModernBERT-base"
 LR_GRID = (3e-5, 5e-5, 8e-5)
 SWEEP_SEED = 42
+PRECISIONS = ("bf16", "fp16", "fp32")
+AUTOCAST_DTYPES = {"bf16": torch.bfloat16, "fp16": torch.float16, "fp32": None}
 
 CONFIG = {
     "encoder": ENCODER,
@@ -96,6 +99,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--head", choices=("softmax", "crf"), required=True, help="output layer")
     parser.add_argument("--seed", type=int, choices=SEEDS, default=42, help="random seed")
     parser.add_argument("--lr", type=float, default=5e-5, help="encoder learning rate")
+    parser.add_argument("--precision", choices=PRECISIONS, default="bf16", help="CUDA autocast precision (CPU runs in fp32)")
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--final", action="store_true", help="evaluate all final splits and write results")
     mode.add_argument("--lr-sweep", action="store_true", help=f"compare {LR_GRID} on dev with seed {SWEEP_SEED}")
@@ -119,11 +123,16 @@ def encode(records: list[dict[str, Any]], tokenizer: Any, split: str) -> list[di
         for position, tag in zip(first, tags):
             labels[position] = tag
         items.append({"input_ids": encoding["input_ids"][index], "labels": labels, "first": first, "tags": tags})
-    print(f"{split}: {too_long} of {len(records)} sentences longer than {CONFIG['max_length']} sub-tokens")
+    longest = longest_length(items)
+    print(f"{split}: {too_long} of {len(records)} sentences longer than {CONFIG['max_length']} sub-tokens (longest {longest})")
     if too_long:
-        longest = max(len(item["input_ids"]) for item in items)
-        raise SystemExit(f"max_length {CONFIG['max_length']} would truncate {split}; {longest} is needed")
+        raise SystemExit(f"max_length {CONFIG['max_length']} would truncate {too_long} sentences in {split}; {longest} is needed")
     return items
+
+
+def longest_length(items: list[dict[str, Any]]) -> int:
+    """Return the longest sub-token length among encoded sentences."""
+    return max(len(item["input_ids"]) for item in items)
 
 
 def make_collate(pad_id: int):
@@ -153,27 +162,28 @@ def make_collate(pad_id: int):
     return collate
 
 
-def autocast_dtype(device: torch.device) -> torch.dtype | None:
-    """Return bf16 where supported natively, fp16 on older GPUs and None on CPU."""
+def autocast_dtype(precision: str, device: torch.device) -> torch.dtype | None:
+    """Return the autocast dtype for the requested precision, or None for fp32 and CPU."""
     if device.type != "cuda":
         return None
-    return torch.bfloat16 if torch.cuda.is_bf16_supported(including_emulation=False) else torch.float16
+    if precision == "bf16" and not torch.cuda.is_bf16_supported(including_emulation=False):
+        raise SystemExit("bf16 is not natively supported on this GPU; pass --precision fp16 or --precision fp32")
+    return AUTOCAST_DTYPES[precision]
 
 
-def autocast(device: torch.device) -> contextlib.AbstractContextManager:
+def autocast(device: torch.device, dtype: torch.dtype | None) -> contextlib.AbstractContextManager:
     """Return the mixed-precision context for the device."""
-    dtype = autocast_dtype(device)
     return torch.autocast(device.type, dtype=dtype) if dtype else contextlib.nullcontext()
 
 
 @torch.no_grad()
-def predict(model: nn.Module, data: list[dict[str, Any]], collate: Any, device: torch.device) -> list[list[str]]:
+def predict(model: nn.Module, data: list[dict[str, Any]], collate: Any, device: torch.device, dtype: torch.dtype | None) -> list[list[str]]:
     """Return predicted label strings for every encoded sentence."""
     model.eval()
     loader = DataLoader(data, batch_size=CONFIG["batch_size"], shuffle=False, collate_fn=collate)
     predictions: list[list[str]] = []
     for batch in loader:
-        with autocast(device):
+        with autocast(device, dtype):
             rows = model.predict({key: value.to(device) for key, value in batch.items()})
         predictions.extend([LABELS[index] for index in row] for row in rows)
     for item, prediction in zip(data, predictions):
@@ -202,6 +212,7 @@ def train(
     dev_data: list[dict[str, Any]],
     collate: Any,
     device: torch.device,
+    dtype: torch.dtype | None,
 ) -> tuple[nn.Module, int, float]:
     """Fine-tune for CONFIG epochs and return the model at its best dev epoch with (epoch, macro-F1)."""
     set_seed(seed)
@@ -211,7 +222,7 @@ def train(
     generator = torch.Generator().manual_seed(seed)
     loader = DataLoader(train_data, batch_size=CONFIG["batch_size"], shuffle=True, collate_fn=collate, generator=generator)
     optimizer, scheduler = build_optimizer(model, lr, CONFIG["epochs"] * len(loader))
-    scaler = torch.amp.GradScaler(enabled=autocast_dtype(device) == torch.float16)
+    scaler = torch.amp.GradScaler(enabled=dtype == torch.float16)
     dev_gold = [record["tags"] for record in dev_records]
     best_epoch, best_f1, best_state = 0, -1.0, None
     for epoch in range(1, CONFIG["epochs"] + 1):
@@ -219,7 +230,7 @@ def train(
         started, total = time.perf_counter(), 0.0
         for batch in loader:
             optimizer.zero_grad()
-            with autocast(device):
+            with autocast(device, dtype):
                 loss = model.loss({key: value.to(device) for key, value in batch.items()})
             scaler.scale(loss).backward()
             scaler.unscale_(optimizer)
@@ -228,7 +239,7 @@ def train(
             scaler.update()
             scheduler.step()
             total += loss.item()
-        dev = evaluate(dev_gold, predict(model, dev_data, collate, device))
+        dev = evaluate(dev_gold, predict(model, dev_data, collate, device, dtype))
         print(
             f"epoch {epoch}  loss {total / len(loader):.4f}  dev macro-F1 {dev['macro_f1']:.4f}  "
             f"invalid IOB2 {dev['invalid_iob2_rate']:.4f}  {time.perf_counter() - started:.0f}s",
@@ -241,23 +252,23 @@ def train(
     return model, best_epoch, best_f1
 
 
-def lr_sweep(head: str, train_data: list, dev_records: list, dev_data: list, collate: Any, device: torch.device) -> None:
+def lr_sweep(head: str, train_data: list, dev_records: list, dev_data: list, collate: Any, device: torch.device, dtype: torch.dtype | None) -> None:
     """Train once per learning rate in LR_GRID and print the dev table."""
     rows = []
     for lr in LR_GRID:
         print(f"--- lr {lr:g}")
-        _, best_epoch, best_f1 = train(head, lr, SWEEP_SEED, train_data, dev_records, dev_data, collate, device)
+        _, best_epoch, best_f1 = train(head, lr, SWEEP_SEED, train_data, dev_records, dev_data, collate, device, dtype)
         rows.append((lr, best_epoch, best_f1))
     print(f"\nlr sweep ({head} head, seed {SWEEP_SEED}, dev only)\n{'lr':>8}  best epoch  dev macro-F1")
     for lr, best_epoch, best_f1 in rows:
         print(f"{lr:>8g}  {best_epoch:>10d}  {best_f1:.4f}")
 
 
-def run_final(model: nn.Module, name: str, final_data: dict[str, tuple[list, list]], collate: Any, args: argparse.Namespace, run_info: dict, device: torch.device) -> None:
+def run_final(model: nn.Module, name: str, final_data: dict[str, tuple[list, list]], collate: Any, args: argparse.Namespace, run_info: dict, device: torch.device, dtype: torch.dtype | None) -> None:
     """Predict every final split, write predictions, the run file and the checkpoint."""
     splits: dict[str, Any] = {}
     for split, (records, data) in final_data.items():
-        predictions = predict(model, data, collate, device)
+        predictions = predict(model, data, collate, device, dtype)
         write_preds(name, args.seed, split, [record["id"] for record in records], predictions)
         splits[split] = evaluate([record["tags"] for record in records], predictions)
         print(f"{split}: macro-F1 {splits[split]['macro_f1']:.4f}")
@@ -269,7 +280,10 @@ def run_final(model: nn.Module, name: str, final_data: dict[str, tuple[list, lis
 def main() -> None:
     """Fine-tune on train, report dev, and with --final evaluate and save every final split."""
     args = parse_args()
+    os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    dtype = autocast_dtype(args.precision, device)
+    precision = args.precision if dtype else "fp32"
     tokenizer = AutoTokenizer.from_pretrained(ENCODER)
     collate = make_collate(tokenizer.pad_token_id)
     train_records, dev_records = load_split("train"), load_split("dev")
@@ -282,18 +296,21 @@ def main() -> None:
             final_data[split] = (records, encode(records, tokenizer, split))
 
     if args.lr_sweep:
-        lr_sweep(args.head, train_data, dev_records, dev_data, collate, device)
+        print(f"precision {precision}")
+        lr_sweep(args.head, train_data, dev_records, dev_data, collate, device, dtype)
         return
 
     name = "modernbert" if args.head == "softmax" else "modernbert_crf"
-    print(f"{name} seed {args.seed} lr {args.lr:g} on {hardware(device)}, autocast {autocast_dtype(device)}")
+    print(f"{name} seed {args.seed} lr {args.lr:g} on {hardware(device)}, precision {precision}")
     started = time.perf_counter()
-    model, best_epoch, best_f1 = train(args.head, args.lr, args.seed, train_data, dev_records, dev_data, collate, device)
+    model, best_epoch, best_f1 = train(args.head, args.lr, args.seed, train_data, dev_records, dev_data, collate, device, dtype)
     train_time = time.perf_counter() - started
     print(f"best epoch {best_epoch}: dev macro-F1 {best_f1:.4f} ({train_time:.0f}s)")
 
     if args.final:
-        config = {**CONFIG, "head": args.head, "lr": args.lr, "precision": str(autocast_dtype(device))}
+        longest = {"train": longest_length(train_data)}
+        longest.update({split: longest_length(data) for split, (_, data) in final_data.items()})
+        config = {**CONFIG, "head": args.head, "lr": args.lr, "precision": precision, "longest_subtokens": longest}
         run_info = {
             "config": config,
             "train_time_s": round(train_time, 1),
@@ -301,7 +318,7 @@ def main() -> None:
             "n_params": sum(parameter.numel() for parameter in model.parameters()),
             "best_epoch": best_epoch,
         }
-        run_final(model, name, final_data, collate, args, run_info, device)
+        run_final(model, name, final_data, collate, args, run_info, device, dtype)
 
 
 if __name__ == "__main__":
