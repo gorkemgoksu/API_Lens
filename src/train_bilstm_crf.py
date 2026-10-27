@@ -94,9 +94,10 @@ class CRF(nn.Module):
         """Decode each sentence with the shared Viterbi on the learned, masked scores."""
         transitions, start, end = (score.detach().cpu().double().numpy() for score in self.masked_scores())
         allowed = self.allowed.cpu().numpy()
+        start_allowed = self.start_allowed.cpu().numpy()
         scores = emissions.detach().cpu().double().numpy()
         lengths = mask.sum(dim=1).tolist()
-        return [list(viterbi(scores[i, :n], transitions, start, end, allowed)) for i, n in enumerate(lengths)]
+        return [list(viterbi(scores[i, :n], transitions, start, end, allowed, start_allowed)) for i, n in enumerate(lengths)]
 
 
 class BiLSTMTagger(nn.Module):
