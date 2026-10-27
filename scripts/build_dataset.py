@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import html
 import json
 import random
 import re
@@ -88,6 +89,19 @@ MARKDOWN_TABLE_RULE_RE = re.compile(r"^\s*\|?\s*:?-{3,}:?(?:\s*\|\s*:?-{3,}:?)+\
 OPTION_RE = re.compile(r"^\s*:[\w-]+:(?:\s|$)")
 PROMPT_RE = re.compile(r"^\s*(?:>>>|\.\.\.)\s?")
 SUBSTITUTION_RE = re.compile(r"^\s*\.\.\s+\|[^|]+\|\s+")
+SUBSTITUTION_REF_RE = re.compile(r"\|(?P<name>[A-Za-z][\w-]*)\|")
+JINJA_LINE_RE = re.compile(r"^\s*(?:\{\{.*\}\}|\{%.*%\}|\{#.*#\})\s*$")
+HEADER_ASSIGNMENT_RE = re.compile(
+    r"^\s*header\s*=\s*(?:[rubf]{0,2})?(?P<quote>'''|\"\"\")(?P<body>.*?)(?P=quote)",
+    re.IGNORECASE | re.MULTILINE | re.DOTALL,
+)
+CURRENTMODULE_RE = re.compile(r"^\s*\.\.\s+currentmodule::\s*(?P<module>\S+)\s*$", re.MULTILINE)
+BADGE_SUBSTITUTION_RE = re.compile(
+    r"^\s*\.\.\s+\|(?P<name>[^|\n]+)\|\s+replace::\s+"
+    r":raw-html:`<span\s+class=(?P<quote>[\"'])badge(?:\s+[^\"']*)?(?P=quote)>"
+    r"(?P<label>[^<\n]+)</span>`",
+    re.IGNORECASE | re.MULTILINE,
+)
 LIST_MARKER_RE = re.compile(r"^\s*(?:[-*+] |(?:\d+|#)[.)]\s+)")
 LIST_CONTINUATION_RE = re.compile(r"\b(?:and|or)$", re.IGNORECASE)
 MARKDOWN_HEADING_RE = re.compile(r"^\s{0,3}#{1,6}\s+")
@@ -285,7 +299,19 @@ def _render_non_api(body: str) -> str:
     return target.lstrip("!~.")
 
 
-def render_inline(text: str, default_role: str | None) -> tuple[str, tuple[Candidate, ...], tuple[LiteralSpan, ...]]:
+def parse_badge_substitutions(text: str) -> dict[str, str]:
+    """Return raw-HTML badge substitutions and their visible labels."""
+    return {
+        match.group("name").strip(): html.unescape(re.sub(r"\s+", " ", match.group("label")).strip())
+        for match in BADGE_SUBSTITUTION_RE.finditer(text)
+    }
+
+
+def render_inline(
+    text: str,
+    default_role: str | None,
+    substitutions: dict[str, str] | None = None,
+) -> tuple[str, tuple[Candidate, ...], tuple[LiteralSpan, ...]]:
     """Render inline reST/MyST markup and track candidate offsets."""
     output: list[str] = []
     candidates: list[Candidate] = []
@@ -301,6 +327,11 @@ def render_inline(text: str, default_role: str | None) -> tuple[str, tuple[Candi
         return start, output_length
 
     escaped_backtick = "\ue000"
+    if substitutions:
+        text = SUBSTITUTION_REF_RE.sub(
+            lambda match: substitutions.get(match.group("name"), match.group(0)),
+            text,
+        )
     safe_text = text.replace("\\`", escaped_backtick)
 
     def render_plain(value: str) -> str:
@@ -375,7 +406,10 @@ def _strip_list_marker(line: str) -> str:
     return LIST_MARKER_RE.sub("", line, count=1).strip()
 
 
-def iter_raw_paragraphs(text: str) -> Iterator[tuple[str | None, str]]:
+def iter_raw_paragraphs(
+    text: str,
+    header_current_module: str | None = None,
+) -> Iterator[tuple[str | None, str]]:
     """Yield ``(current_module, markup_paragraph)`` while skipping non-prose blocks."""
     lines = text.splitlines()
     current_module: str | None = None
@@ -434,6 +468,15 @@ def iter_raw_paragraphs(text: str) -> Iterator[tuple[str | None, str]]:
                 skip_indent = 0
                 index += 1
                 continue
+
+        if JINJA_LINE_RE.fullmatch(line):
+            pending = flush()
+            if pending:
+                yield pending
+            if stripped == "{{ header }}":
+                current_module = header_current_module
+            index += 1
+            continue
 
         myst_directive = MYST_DIRECTIVE_RE.match(line)
         if myst_directive:
@@ -563,13 +606,18 @@ def extract_document(
     doc_path: str,
     text: str,
     default_role: str | None,
+    *,
+    header_current_module: str | None = None,
+    substitutions: dict[str, str] | None = None,
 ) -> list[Paragraph]:
     """Extract rendered paragraphs and candidates from one documentation file."""
+    if any(line.strip() == "{{ header }}" for line in text.splitlines()) and not header_current_module:
+        raise ValueError(f"{library}/{doc_path} uses {{{{ header }}}} without a header currentmodule")
     paragraphs: list[Paragraph] = []
     source_type = classify_source_type(doc_path)
-    for current_module, markup in iter_raw_paragraphs(text):
+    for current_module, markup in iter_raw_paragraphs(text, header_current_module):
         markup = re.sub(r"\s+", " ", markup).strip()
-        rendered, candidates, literal_spans = render_inline(markup, default_role)
+        rendered, candidates, literal_spans = render_inline(markup, default_role, substitutions)
         if not rendered:
             continue
         # Whitespace is already normalized before rendering because source lines
@@ -1120,6 +1168,20 @@ def decode_source_bytes(payload: bytes) -> str:
     return payload.decode("utf-8", errors="replace")
 
 
+def load_header_current_module(source: dict[str, object]) -> str | None:
+    """Read the current module from a library's configured header string."""
+    conf_path = source.get("conf_path")
+    if not isinstance(conf_path, str):
+        return None
+    library = str(source["library"])
+    conf_text = read_source_text(RAW_DIR / library / conf_path)
+    header_match = HEADER_ASSIGNMENT_RE.search(conf_text)
+    if not header_match:
+        return None
+    module_match = CURRENTMODULE_RE.search(header_match.group("body"))
+    return module_match.group("module") if module_match else None
+
+
 def extract_all() -> tuple[list[Paragraph], list[tuple[str, str, str]]]:
     """Extract every pinned documentation file in stable order."""
     paragraphs: list[Paragraph] = []
@@ -1128,12 +1190,30 @@ def extract_all() -> tuple[list[Paragraph], list[tuple[str, str, str]]]:
         library = str(source["library"])
         default_role = source.get("default_role")
         library_root = RAW_DIR / library
-        for path in iter_doc_files(source):
+        documents = [(path, read_source_text(path)) for path in iter_doc_files(source)]
+        substitutions: dict[str, str] = {}
+        for path, text in documents:
+            for name, label in parse_badge_substitutions(text).items():
+                previous = substitutions.get(name)
+                if previous is not None and previous != label:
+                    doc_path = path.relative_to(library_root).as_posix()
+                    raise ValueError(f"conflicting badge substitution {name!r} in {library}/{doc_path}")
+                substitutions[name] = label
+        header_current_module = load_header_current_module(source)
+        for path, text in documents:
             doc_path = path.relative_to(library_root).as_posix()
             source_type = classify_source_type(doc_path)
             mappings.append((library, doc_path, source_type))
-            text = read_source_text(path)
-            paragraphs.extend(extract_document(library, doc_path, text, default_role if isinstance(default_role, str) else None))
+            paragraphs.extend(
+                extract_document(
+                    library,
+                    doc_path,
+                    text,
+                    default_role if isinstance(default_role, str) else None,
+                    header_current_module=header_current_module,
+                    substitutions=substitutions,
+                )
+            )
     return paragraphs, mappings
 
 
