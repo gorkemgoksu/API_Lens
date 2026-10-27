@@ -9,6 +9,7 @@ import pytest
 import torch
 
 from src.data_io import LABEL2ID, LABELS, tags_to_spans
+from src.metrics import is_valid_iob2
 from src.train_bilstm_crf import CRF
 from src.viterbi import bio_allowed, viterbi
 
@@ -212,3 +213,13 @@ def test_crf_ignores_padding() -> None:
     torch.testing.assert_close(log_z[1], crf.log_partition(emissions[1:, :4], mask[1:, :4])[0])
     torch.testing.assert_close(score[1], crf.path_score(emissions[1:, :4], tags[1:, :4], mask[1:, :4])[0])
     assert bool((log_z >= score).all())
+
+
+def test_crf_decode_never_starts_with_inside_label() -> None:
+    crf = CRF(*bio_allowed(LABELS)).double()
+    emissions = torch.zeros(1, 4, len(LABELS), dtype=torch.float64)
+    emissions[0, 0, LABEL2ID["I-FUNCTION"]] = 1e6
+    path = crf.decode(emissions, torch.ones(1, 4, dtype=torch.bool))[0]
+    tags = [LABELS[i] for i in path]
+    assert not tags[0].startswith("I-")
+    assert is_valid_iob2(tags)
