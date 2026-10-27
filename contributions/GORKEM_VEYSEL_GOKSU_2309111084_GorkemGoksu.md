@@ -14,22 +14,23 @@
 - Documents, rather than individual sentences, are assigned to splits to prevent page-level leakage.
 - PyTorch is reserved for held-out evaluation so cross-library generalization can be measured.
 - Cleaning rules are ordered and counted; unresolved, ambiguous, malformed, or likely unlabeled API mentions are removed instead of guessed.
-- The dataset is frozen at Git tag `data-v1`; later corrections must use a new dataset version.
+- The original dataset remains frozen at Git tag `data-v1`; approved corrections are versioned separately instead of moving an existing tag.
+- The `data-v2` rendering update applies each library's configured `currentmodule` at `{{ header }}` lines and renders raw-HTML badge substitutions as visible text, recovering valid sentences without changing any cleaning rule, threshold, seed, split ratio, or sampling policy.
 
 ## Numbers I produced
 
 - Split sizes and all corpus statistics are recorded in [`data/processed/stats.json`](../data/processed/stats.json).
-- `train`: 7,273 sentences; `dev`: 879; `test`: 1,096; `heldout`: 600; `test_noparen`: 1,096 (`stats.json -> splits`).
-- Entity totals are ATTRIBUTE 721, CLASS 3,977, EXCEPTION 108, FUNCTION 3,300, METHOD 1,992, and MODULE 651 (`stats.json -> entity_types`).
+- `train`: 12,486 sentences; `dev`: 2,080; `test`: 1,630; `heldout`: 600; `test_noparen`: 1,630 (`stats.json -> splits`).
+- Entity totals are ATTRIBUTE 990, CLASS 7,904, EXCEPTION 131, FUNCTION 4,929, METHOD 4,886, and MODULE 664 (`stats.json -> entity_types`).
 - Shared document paths across splits: 0 (`stats.json -> shared_doc_paths`).
 
 ## One-sentence presentation finding
 
-APILens deterministically turns version-pinned documentation into 9,848 leak-free sentences with 10,749 objectively typed API mentions, while reserving PyTorch as an unseen-library evaluation set (`stats.json -> splits`, `entity_types`, and `shared_doc_paths`).
+APILens deterministically turns version-pinned documentation into 16,796 leak-free sentences with 19,504 objectively typed API mentions, while reserving PyTorch as an unseen-library evaluation set (`stats.json -> splits`, `entity_types`, and `shared_doc_paths`).
 
 ## How I verified the work
 
-- Ran the current `main` test suite: 86 tests passed.
+- Ran the current test suite: 88 tests passed.
 - Rebuilt all six processed artifacts and confirmed byte-for-byte SHA-256 equality.
 - Verified all 1,766 recorded raw-source checksums.
 - Reviewed a seeded sample of 120 final sentences, with 20 examples from each source library.
@@ -40,9 +41,9 @@ APILens deterministically turns version-pinned documentation into 9,848 leak-fre
 
 ## How I used AI tools
 
-- I used Codex to draft and refine the data pipeline, tests, documentation, and reproducibility checks.
-- I reviewed generated diffs through automated tests, deterministic rebuilds, checksum verification, balanced sentence samples, cleaning-rule samples, inventory-role checks, and official documentation links.
-- AI-generated output was not accepted solely from prose claims; each published dataset artifact was checked against executable or source-backed evidence.
+- I used a coding assistant to draft and refine the data pipeline, tests, documentation, and reproducibility checks.
+- I reviewed every generated diff through automated tests, deterministic rebuilds, checksum verification, balanced sentence samples, cleaning-rule samples, inventory-role checks, and official documentation links.
+- No assistant output was accepted on its own description; each published dataset artifact was checked against executable or source-backed evidence.
 
 ## Limitations and next steps
 
