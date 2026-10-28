@@ -98,18 +98,20 @@ def predict(crf: sklearn_crfsuite.CRF, features: list[list[dict[str, Any]]]) -> 
     return [[str(tag) for tag in sentence] for sentence in crf.predict(features)]
 
 
-def select(train_records: list[dict[str, Any]], dev: list[dict[str, Any]], context: bool) -> tuple[sklearn_crfsuite.CRF, float, float]:
-    """Fit the 3 x 3 grid, print every dev macro-F1 and return the best (crf, c1, c2)."""
+def select(train_records: list[dict[str, Any]], dev: list[dict[str, Any]], context: bool) -> tuple[sklearn_crfsuite.CRF, float, float, float]:
+    """Fit the 3 x 3 grid, print every dev macro-F1 and return the best (crf, c1, c2, fit seconds)."""
     train_features, train_tags = featurize(train_records, context), [r["tags"] for r in train_records]
     dev_features, dev_tags = featurize(dev, context), [r["tags"] for r in dev]
-    best: tuple[sklearn_crfsuite.CRF, float, float] | None = None
+    best: tuple[sklearn_crfsuite.CRF, float, float, float] | None = None
     best_f1 = -1.0
     for c1, c2 in itertools.product(GRID, GRID):
+        started = time.perf_counter()
         crf = train(train_features, train_tags, c1, c2)
+        fit_time = time.perf_counter() - started
         f1 = metrics.evaluate(dev_tags, predict(crf, dev_features))["macro_f1"]
-        print(f"c1={c1:<4} c2={c2:<4} dev macro-F1 {f1:.4f}")
+        print(f"c1={c1:<4} c2={c2:<4} dev macro-F1 {f1:.4f}  {fit_time:.0f}s")
         if f1 > best_f1:
-            best, best_f1 = (crf, c1, c2), f1
+            best, best_f1 = (crf, c1, c2, fit_time), f1
     assert best is not None
     return best
 
@@ -135,10 +137,8 @@ def main() -> None:
     context = not args.no_context
     name = "crf" if context else "crf-nocontext"
 
-    started = time.perf_counter()
-    crf, c1, c2 = select(load_split("train"), load_split("dev"), context)
-    train_time = time.perf_counter() - started
-    print(f"chosen c1={c1} c2={c2}")
+    crf, c1, c2, train_time = select(load_split("train"), load_split("dev"), context)
+    print(f"chosen c1={c1} c2={c2} (fit {train_time:.0f}s)")
     describe(crf)
     if not args.final:
         return
