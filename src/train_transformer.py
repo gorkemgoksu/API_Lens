@@ -98,7 +98,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--head", choices=("softmax", "crf"), required=True, help="output layer")
     parser.add_argument("--seed", type=int, choices=SEEDS, default=42, help="random seed")
-    parser.add_argument("--lr", type=float, default=5e-5, help="encoder learning rate")
+    parser.add_argument("--lr", type=float, default=8e-5, help="encoder learning rate")
     parser.add_argument("--precision", choices=PRECISIONS, default="bf16", help="CUDA autocast precision (CPU runs in fp32)")
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--final", action="store_true", help="evaluate all final splits and write results")
