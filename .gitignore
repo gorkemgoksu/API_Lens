@@ -1,5 +1,6 @@
-# Local working prompts (never commit)
-PROMPTS.md
+# Local working notes at the repo root (never commit)
+/*.md
+!/README.md
 
 # Python
 __pycache__/
