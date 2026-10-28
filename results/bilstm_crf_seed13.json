@@ -1,0 +1,534 @@
+{
+  "model": "bilstm_crf",
+  "seed": 13,
+  "config": {
+    "word_dim": 100,
+    "min_freq": 2,
+    "char_dim": 30,
+    "char_filters": 50,
+    "char_width": 3,
+    "hidden": 200,
+    "dropout": 0.5,
+    "lr": 0.001,
+    "batch_size": 32,
+    "clip": 5.0,
+    "patience": 5,
+    "max_epochs": 50,
+    "use_char": true,
+    "use_crf": true
+  },
+  "train_time_s": 526.4,
+  "hardware": "cpu (Darwin arm64)",
+  "n_params": 1399348,
+  "best_epoch": 12,
+  "splits": {
+    "dev": {
+      "macro_f1": 0.8381079856499317,
+      "macro_precision": 0.862181067995536,
+      "macro_recall": 0.8231278526183127,
+      "micro_f1": 0.901431832330359,
+      "micro_precision": 0.8843648208469055,
+      "micro_recall": 0.9191705459162082,
+      "per_type": {
+        "FUNCTION": {
+          "precision": 0.8996598639455783,
+          "recall": 0.9104991394148021,
+          "f1": 0.9050470487596236,
+          "support": 581
+        },
+        "METHOD": {
+          "precision": 0.957613814756672,
+          "recall": 0.9159159159159159,
+          "f1": 0.9363008442056793,
+          "support": 666
+        },
+        "CLASS": {
+          "precision": 0.8543876567020251,
+          "recall": 0.9672489082969432,
+          "f1": 0.9073220686123913,
+          "support": 916
+        },
+        "MODULE": {
+          "precision": 0.9433962264150944,
+          "recall": 0.7692307692307693,
+          "f1": 0.847457627118644,
+          "support": 65
+        },
+        "ATTRIBUTE": {
+          "precision": 0.671875,
+          "recall": 0.7288135593220338,
+          "f1": 0.6991869918699187,
+          "support": 118
+        },
+        "EXCEPTION": {
+          "precision": 0.8461538461538461,
+          "recall": 0.6470588235294118,
+          "f1": 0.7333333333333334,
+          "support": 17
+        }
+      },
+      "span_f1": 0.9421041709898319,
+      "confusion": {
+        "rows": [
+          "FUNCTION",
+          "METHOD",
+          "CLASS",
+          "MODULE",
+          "ATTRIBUTE",
+          "EXCEPTION"
+        ],
+        "columns": [
+          "FUNCTION",
+          "METHOD",
+          "CLASS",
+          "MODULE",
+          "ATTRIBUTE",
+          "EXCEPTION",
+          "missed"
+        ],
+        "matrix": [
+          [
+            529,
+            9,
+            0,
+            0,
+            26,
+            0,
+            17
+          ],
+          [
+            43,
+            610,
+            0,
+            0,
+            6,
+            0,
+            7
+          ],
+          [
+            1,
+            0,
+            886,
+            0,
+            0,
+            0,
+            29
+          ],
+          [
+            4,
+            0,
+            0,
+            50,
+            1,
+            0,
+            10
+          ],
+          [
+            5,
+            2,
+            0,
+            0,
+            86,
+            0,
+            25
+          ],
+          [
+            0,
+            0,
+            1,
+            0,
+            0,
+            11,
+            5
+          ]
+        ]
+      },
+      "token_accuracy": 0.9822755731723796,
+      "invalid_iob2_rate": 0.0,
+      "n_sentences": 2080,
+      "n_gold_entities": 2363,
+      "n_pred_entities": 2456
+    },
+    "test": {
+      "macro_f1": 0.8206194888216665,
+      "macro_precision": 0.8924364986782515,
+      "macro_recall": 0.7721641499150818,
+      "micro_f1": 0.8516974389517571,
+      "micro_precision": 0.8598917618761275,
+      "micro_recall": 0.8436578171091446,
+      "per_type": {
+        "FUNCTION": {
+          "precision": 0.8329809725158562,
+          "recall": 0.9205607476635514,
+          "f1": 0.8745837957824639,
+          "support": 428
+        },
+        "METHOD": {
+          "precision": 0.8650306748466258,
+          "recall": 0.8676923076923077,
+          "f1": 0.8663594470046082,
+          "support": 325
+        },
+        "CLASS": {
+          "precision": 0.8767908309455588,
+          "recall": 0.8429752066115702,
+          "f1": 0.8595505617977529,
+          "support": 726
+        },
+        "MODULE": {
+          "precision": 1.0,
+          "recall": 0.7384615384615385,
+          "f1": 0.8495575221238938,
+          "support": 65
+        },
+        "ATTRIBUTE": {
+          "precision": 0.7798165137614679,
+          "recall": 0.6204379562043796,
+          "f1": 0.6910569105691057,
+          "support": 137
+        },
+        "EXCEPTION": {
+          "precision": 1.0,
+          "recall": 0.6428571428571429,
+          "f1": 0.782608695652174,
+          "support": 14
+        }
+      },
+      "span_f1": 0.9082787373436569,
+      "confusion": {
+        "rows": [
+          "FUNCTION",
+          "METHOD",
+          "CLASS",
+          "MODULE",
+          "ATTRIBUTE",
+          "EXCEPTION"
+        ],
+        "columns": [
+          "FUNCTION",
+          "METHOD",
+          "CLASS",
+          "MODULE",
+          "ATTRIBUTE",
+          "EXCEPTION",
+          "missed"
+        ],
+        "matrix": [
+          [
+            394,
+            7,
+            2,
+            0,
+            11,
+            0,
+            14
+          ],
+          [
+            17,
+            282,
+            0,
+            0,
+            3,
+            0,
+            23
+          ],
+          [
+            16,
+            1,
+            612,
+            0,
+            5,
+            0,
+            92
+          ],
+          [
+            10,
+            0,
+            0,
+            48,
+            1,
+            0,
+            6
+          ],
+          [
+            14,
+            3,
+            5,
+            0,
+            85,
+            0,
+            30
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            9,
+            5
+          ]
+        ]
+      },
+      "token_accuracy": 0.9749780765857936,
+      "invalid_iob2_rate": 0.0,
+      "n_sentences": 1630,
+      "n_gold_entities": 1695,
+      "n_pred_entities": 1663
+    },
+    "heldout": {
+      "macro_f1": 0.2452925888665325,
+      "macro_precision": 0.401690389337911,
+      "macro_recall": 0.20325773827765858,
+      "micro_f1": 0.42400774443368827,
+      "micro_precision": 0.6169014084507042,
+      "micro_recall": 0.3230088495575221,
+      "per_type": {
+        "FUNCTION": {
+          "precision": 0.5934959349593496,
+          "recall": 0.5816733067729084,
+          "f1": 0.5875251509054326,
+          "support": 251
+        },
+        "METHOD": {
+          "precision": 0.5967741935483871,
+          "recall": 0.2846153846153846,
+          "f1": 0.38541666666666663,
+          "support": 130
+        },
+        "CLASS": {
+          "precision": 0.8181818181818182,
+          "recall": 0.15,
+          "f1": 0.2535211267605634,
+          "support": 240
+        },
+        "MODULE": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 51
+        },
+        "ATTRIBUTE": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 6
+        },
+        "EXCEPTION": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 0
+        }
+      },
+      "span_f1": 0.6253630203291385,
+      "confusion": {
+        "rows": [
+          "FUNCTION",
+          "METHOD",
+          "CLASS",
+          "MODULE",
+          "ATTRIBUTE",
+          "EXCEPTION"
+        ],
+        "columns": [
+          "FUNCTION",
+          "METHOD",
+          "CLASS",
+          "MODULE",
+          "ATTRIBUTE",
+          "EXCEPTION",
+          "missed"
+        ],
+        "matrix": [
+          [
+            146,
+            16,
+            0,
+            0,
+            1,
+            0,
+            88
+          ],
+          [
+            74,
+            37,
+            0,
+            0,
+            0,
+            0,
+            19
+          ],
+          [
+            4,
+            3,
+            36,
+            0,
+            0,
+            0,
+            197
+          ],
+          [
+            6,
+            0,
+            0,
+            0,
+            0,
+            0,
+            45
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            6
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        ]
+      },
+      "token_accuracy": 0.8696054457735775,
+      "invalid_iob2_rate": 0.0,
+      "n_sentences": 600,
+      "n_gold_entities": 678,
+      "n_pred_entities": 355
+    },
+    "test_noparen": {
+      "macro_f1": 0.7138072304698851,
+      "macro_precision": 0.8149826532820589,
+      "macro_recall": 0.6424325419591747,
+      "micro_f1": 0.7365017782088585,
+      "micro_precision": 0.8147353361945636,
+      "micro_recall": 0.671976401179941,
+      "per_type": {
+        "FUNCTION": {
+          "precision": 0.7919463087248322,
+          "recall": 0.5514018691588785,
+          "f1": 0.650137741046832,
+          "support": 428
+        },
+        "METHOD": {
+          "precision": 0.7563451776649747,
+          "recall": 0.4584615384615385,
+          "f1": 0.5708812260536399,
+          "support": 325
+        },
+        "CLASS": {
+          "precision": 0.855944055944056,
+          "recall": 0.8429752066115702,
+          "f1": 0.84941013185288,
+          "support": 726
+        },
+        "MODULE": {
+          "precision": 0.9056603773584906,
+          "recall": 0.7384615384615385,
+          "f1": 0.8135593220338984,
+          "support": 65
+        },
+        "ATTRIBUTE": {
+          "precision": 0.68,
+          "recall": 0.6204379562043796,
+          "f1": 0.648854961832061,
+          "support": 137
+        },
+        "EXCEPTION": {
+          "precision": 0.9,
+          "recall": 0.6428571428571429,
+          "f1": 0.75,
+          "support": 14
+        }
+      },
+      "span_f1": 0.8108632395732299,
+      "confusion": {
+        "rows": [
+          "FUNCTION",
+          "METHOD",
+          "CLASS",
+          "MODULE",
+          "ATTRIBUTE",
+          "EXCEPTION"
+        ],
+        "columns": [
+          "FUNCTION",
+          "METHOD",
+          "CLASS",
+          "MODULE",
+          "ATTRIBUTE",
+          "EXCEPTION",
+          "missed"
+        ],
+        "matrix": [
+          [
+            236,
+            12,
+            13,
+            5,
+            12,
+            0,
+            150
+          ],
+          [
+            1,
+            149,
+            0,
+            0,
+            17,
+            0,
+            158
+          ],
+          [
+            16,
+            1,
+            612,
+            0,
+            5,
+            0,
+            92
+          ],
+          [
+            10,
+            0,
+            0,
+            48,
+            1,
+            0,
+            6
+          ],
+          [
+            14,
+            3,
+            5,
+            0,
+            85,
+            0,
+            30
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            9,
+            5
+          ]
+        ]
+      },
+      "token_accuracy": 0.9577796569219619,
+      "invalid_iob2_rate": 0.0,
+      "n_sentences": 1630,
+      "n_gold_entities": 1695,
+      "n_pred_entities": 1398
+    }
+  }
+}
