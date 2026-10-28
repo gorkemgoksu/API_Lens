@@ -1,3 +1,7 @@
+# Local project instructions and working prompts (never commit)
+CLAUDE.md
+PROMPTS.md
+
 # Python
 __pycache__/
 *.py[cod]
