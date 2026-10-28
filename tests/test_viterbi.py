@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import itertools
+from typing import Any
 
 import numpy as np
 import pytest
-import torch
 
 from src.data_io import LABEL2ID, LABELS, tags_to_spans
 from src.metrics import is_valid_iob2
-from src.train_bilstm_crf import CRF
 from src.viterbi import bio_allowed, viterbi
 
 
@@ -163,7 +162,16 @@ def test_no_finite_path_is_rejected() -> None:
 
 
 # CRF layer tests.
-def random_crf(allowed: np.ndarray, start_allowed: np.ndarray, generator: torch.Generator) -> CRF:
+def crf_modules() -> tuple[Any, Any]:
+    """Return torch and the CRF class, skipping the test when torch is missing."""
+    torch = pytest.importorskip("torch")
+    from src.train_bilstm_crf import CRF
+
+    return torch, CRF
+
+
+def random_crf(allowed: np.ndarray, start_allowed: np.ndarray, generator: Any) -> Any:
+    torch, CRF = crf_modules()
     crf = CRF(allowed, start_allowed).double()
     with torch.no_grad():
         for parameter in crf.parameters():
@@ -171,7 +179,8 @@ def random_crf(allowed: np.ndarray, start_allowed: np.ndarray, generator: torch.
     return crf
 
 
-def brute_force_log_partition(crf: CRF, emissions: torch.Tensor) -> torch.Tensor:
+def brute_force_log_partition(crf: Any, emissions: Any) -> Any:
+    torch, _ = crf_modules()
     transitions, start, end = crf.masked_scores()
     length, num_tags = emissions.shape
     paths = torch.tensor(list(itertools.product(range(num_tags), repeat=length)))
@@ -181,6 +190,7 @@ def brute_force_log_partition(crf: CRF, emissions: torch.Tensor) -> torch.Tensor
 
 
 def test_crf_log_partition_matches_brute_force() -> None:
+    torch, CRF = crf_modules()
     generator = torch.Generator().manual_seed(0)
     for _ in range(200):
         num_tags = int(torch.randint(2, 5, (1,), generator=generator))
@@ -193,6 +203,7 @@ def test_crf_log_partition_matches_brute_force() -> None:
 
 
 def test_crf_log_partition_with_iob2_mask_matches_brute_force() -> None:
+    torch, CRF = crf_modules()
     generator = torch.Generator().manual_seed(1)
     crf = random_crf(*bio_allowed(LABELS), generator)
     for length in (1, 2, 3):
@@ -203,6 +214,7 @@ def test_crf_log_partition_with_iob2_mask_matches_brute_force() -> None:
 
 
 def test_crf_ignores_padding() -> None:
+    torch, CRF = crf_modules()
     generator = torch.Generator().manual_seed(2)
     crf = random_crf(*bio_allowed(LABELS), generator)
     emissions = torch.randn(2, 6, len(LABELS), generator=generator, dtype=torch.float64)
@@ -216,6 +228,7 @@ def test_crf_ignores_padding() -> None:
 
 
 def test_crf_decode_never_starts_with_inside_label() -> None:
+    torch, CRF = crf_modules()
     crf = CRF(*bio_allowed(LABELS)).double()
     emissions = torch.zeros(1, 4, len(LABELS), dtype=torch.float64)
     emissions[0, 0, LABEL2ID["I-FUNCTION"]] = 1e6
