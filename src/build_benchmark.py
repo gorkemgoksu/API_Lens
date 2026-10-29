@@ -1,9 +1,14 @@
 """Validate every run in results/ and build benchmark.csv, ablations.csv and the figures.
 
 Usage: python src/build_benchmark.py --final
+       python src/build_benchmark.py --final --sample-audit
+       python src/build_benchmark.py --audit-report --second <second_annotator.csv>
 Without --final only the dev split is checked and nothing is written. With --final every stored
 number is recomputed from results/preds/ (a mismatch stops the script), then the CSVs and the SVG
 figures in results/figures/ are written. Exit status 1 means some expected run is missing.
+
+--sample-audit draws the 150 test sentences of the label audit into results/label_audit.csv
+(never overwrites an existing file); --audit-report summarises the filled file.
 """
 
 from __future__ import annotations
@@ -34,6 +39,10 @@ NAMES = {"rules": "Rules", "hmm": "HMM", "crf": "CRF", "bilstm_crf": "BiLSTM-CRF
 # Categorical slots 1-6 of the validated palette, in fixed order (one colour per model).
 COLORS = dict(zip(MODELS, ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300"]))
 BLUES = ["#cde2fb", "#86b6ef", "#3987e5", "#1c5cab", "#0d366b"]  # sequential ramp, light -> dark
+AUDIT_FILE = RESULTS / "label_audit.csv"
+AUDIT_SEED, AUDIT_SIZE, AUDIT_MIN_PER_TYPE, AUDIT_SECOND_SIZE = 7, 150, 15, 50
+AUDIT_COLUMNS = ["id", "library", "text", "gold_spans", "spans_ok", "wrong_spans",
+                 "missing_mentions", "annotator", "notes", "second"]
 TOLERANCE = 1e-9
 CSV_DIGITS = 4
 
@@ -264,18 +273,151 @@ def print_table(agg: dict[str, dict[str, dict]], splits: tuple[str, ...]) -> Non
         print(f"{NAMES[model]:<16}" + "".join(f"{c:>20}" for c in cells))
 
 
+def detokenize(tokens: list[str]) -> str:
+    """Join tokens into readable text; no space before closers, after openers or inside "()"."""
+    text = ""
+    for i, token in enumerate(tokens):
+        empty_call = token == "(" and tokens[i + 1 : i + 2] == [")"]
+        if text and token not in ".,;:!?)]}" and text[-1] not in "([{" and not empty_call:
+            text += " "
+        text += token
+    return text
+
+
+def audit_sample(records: list[dict], n: int = AUDIT_SIZE, min_per_type: int = AUDIT_MIN_PER_TYPE,
+                 seed: int = AUDIT_SEED) -> list[int]:
+    """Pick n sentence indices so that every entity type occurs at least min_per_type times.
+
+    Rarest types are served first from a seeded shuffle; the rest is filled from the same
+    shuffle, so the sample is reproducible and the remaining sentences follow the test mix.
+    A type with fewer than min_per_type mentions in the whole split contributes all of them.
+    """
+    totals = {t: sum(s["type"] == t for r in records for s in r["spans"]) for t in ENTITY_TYPES}
+    need = {t: min(min_per_type, c) for t, c in totals.items()}
+    if not all(need.values()):
+        raise ValueError(f"no mentions in the split for: {[t for t, c in need.items() if not c]}")
+    order = [int(i) for i in np.random.default_rng(seed).permutation(len(records))]
+    chosen: list[int] = []
+    seen = {t: 0 for t in ENTITY_TYPES}
+    for etype in sorted(ENTITY_TYPES, key=totals.get):
+        for i in order:
+            if seen[etype] >= need[etype]:
+                break
+            if i not in chosen and any(s["type"] == etype for s in records[i]["spans"]):
+                chosen.append(i)
+                for s in records[i]["spans"]:
+                    seen[s["type"]] += 1
+    chosen += [i for i in order if i not in chosen][: n - len(chosen)]
+    return sorted(chosen)
+
+
+def audit_rows(records: list[dict], indices: list[int]) -> list[dict[str, Any]]:
+    """Build the audit CSV rows; a seeded subset is marked second=1 for the second annotator."""
+    second = set(np.random.default_rng(AUDIT_SEED + 1).choice(
+        len(indices), AUDIT_SECOND_SIZE, replace=False).tolist())
+    rows = []
+    for k, i in enumerate(indices):
+        r = records[i]
+        spans = "; ".join(f"{''.join(r['tokens'][s['start']:s['end']])}|{s['type']}"
+                          for s in r["spans"])
+        rows.append({"id": r["id"], "library": r["library"], "text": detokenize(r["tokens"]),
+                     "gold_spans": spans, "spans_ok": "", "wrong_spans": "",
+                     "missing_mentions": "", "annotator": "", "notes": "",
+                     "second": 1 if k in second else 0})
+    return rows
+
+
+def sample_audit() -> None:
+    """Write results/label_audit.csv from the test split (refuses to overwrite)."""
+    if AUDIT_FILE.exists():
+        raise SystemExit(f"{AUDIT_FILE} already exists; refusing to overwrite a (filled) audit file")
+    records = load_split("test", final=True)
+    indices = audit_sample(records)
+    rows = audit_rows(records, indices)
+    with AUDIT_FILE.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=AUDIT_COLUMNS)
+        writer.writeheader()
+        writer.writerows(rows)
+    counts = {t: sum(s["type"] == t for i in indices for s in records[i]["spans"])
+              for t in ENTITY_TYPES}
+    print(f"Wrote {len(rows)} sentences to {AUDIT_FILE} "
+          f"({sum(r['second'] for r in rows)} marked for the second annotator)")
+    print("entity mentions in the sample:", counts)
+    for etype in ENTITY_TYPES:
+        total = sum(s["type"] == etype for r in records for s in r["spans"])
+        if total < AUDIT_MIN_PER_TYPE:
+            print(f"note: the test split has only {total} {etype} mentions; all are in the sample")
+
+
+def read_audit(path: Path) -> list[dict[str, str]]:
+    """Read an audit CSV and check that spans_ok (and the counts it needs) are filled in."""
+    with path.open(newline="", encoding="utf-8-sig") as handle:
+        rows = list(csv.DictReader(handle))
+    for row in rows:
+        row["spans_ok"] = row["spans_ok"].strip().lower()
+        if row["spans_ok"] not in ("y", "n"):
+            raise ValueError(f"{path.name}: spans_ok must be y or n (id {row['id']})")
+        if row["spans_ok"] == "n" and not row["wrong_spans"].strip().isdigit():
+            raise ValueError(f"{path.name}: wrong_spans must be a number when spans_ok=n "
+                             f"(id {row['id']})")
+        if not row["missing_mentions"].strip().isdigit():
+            raise ValueError(f"{path.name}: missing_mentions must be a number (id {row['id']})")
+    return rows
+
+
+def audit_report(second_path: Path) -> None:
+    """Print the label-audit numbers with their exact definitions."""
+    rows = read_audit(AUDIT_FILE)
+    n_spans = sum(len([s for s in r["gold_spans"].split("; ") if s]) for r in rows)
+    wrong = sum(int(r["wrong_spans"] or 0) for r in rows)
+    missing = sum(int(r["missing_mentions"]) for r in rows)
+    bad_sentences = sum(r["spans_ok"] == "n" for r in rows)
+    print(f"Audited sentences: {len(rows)}  (gold spans in them: {n_spans})")
+    print(f"Wrong-span rate: {wrong}/{n_spans} = {wrong / n_spans:.4f}  "
+          "(marked spans with a wrong boundary or type / all marked spans)")
+    print(f"Sentences with at least one wrong span: {bad_sentences}/{len(rows)} "
+          f"= {bad_sentences / len(rows):.4f}")
+    print(f"Missing mentions per 100 sentences: {100 * missing / len(rows):.2f}  "
+          "(documented API objects in the text that the authors did not mark)")
+    first = {r["id"]: r["spans_ok"] for r in rows if r["second"] == "1"}
+    other = {r["id"]: r["spans_ok"] for r in read_audit(second_path)}
+    shared = sorted(first.keys() & other.keys())
+    if len(shared) != len(first):
+        raise ValueError(f"second annotator covers {len(shared)} of {len(first)} shared sentences")
+    kappa = metrics.cohen_kappa([first[i] for i in shared], [other[i] for i in shared])
+    agree = sum(first[i] == other[i] for i in shared) / len(shared)
+    print(f"Cohen's kappa on spans_ok over {len(shared)} shared sentences: {kappa:.4f}  "
+          f"(raw agreement {agree:.4f})")
+
+
 def parse_args() -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--final", action="store_true",
                         help="read the test splits, verify them and write CSVs and figures")
+    parser.add_argument("--sample-audit", action="store_true",
+                        help="with --final: write results/label_audit.csv (150 test sentences)")
+    parser.add_argument("--audit-report", action="store_true",
+                        help="print wrong-span rate, missing mentions and Cohen's kappa")
+    parser.add_argument("--second", type=Path,
+                        help="second annotator's filled copy of label_audit.csv (50 sentences)")
     return parser.parse_args()
 
 
 def main() -> int:
     """Verify all runs, print the summary, and (with --final) write the outputs."""
     args = parse_args()
+    if args.sample_audit:
+        if not args.final:
+            raise SystemExit("--sample-audit reads the test split and needs --final")
+        sample_audit()
+        return 0
+    if args.audit_report:
+        if args.second is None:
+            raise SystemExit("--audit-report needs --second <second annotator csv>")
+        audit_report(args.second)
+        return 0
     splits = SPLITS if args.final else ("dev",)
     bundle, missing = collect(splits, args.final)
     agg = {m: {s: a for s in splits if (a := aggregate(m, s, bundle))} for m in MODELS}
