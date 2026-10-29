@@ -190,24 +190,33 @@ def _f1_from_counts(tp: np.ndarray, n_pred: np.ndarray, n_gold: np.ndarray) -> t
     return micro, macro
 
 
-def bootstrap_ci(gold: Tags, pred: Tags, n: int = 1000, seed: int = 0) -> dict[str, list[float]]:
-    """95% bootstrap confidence intervals for micro and macro F1, resampling sentences.
+def bootstrap_mean_ci(gold: Tags, preds: Sequence[Tags], n: int = 1000,
+                      seed: int = 0) -> dict[str, list[float]]:
+    """95% bootstrap interval of the seed-mean micro and macro F1, resampling sentences.
 
-    Each resample draws N sentences with replacement, sums their entity counts and recomputes
-    F1 from the summed counts (not the mean of per-sentence F1, which would weight a one-entity
-    sentence like a thirty-entity one). Returns {"micro_f1": [low, high], "macro_f1": [...]}.
+    ``preds`` holds one prediction set per training seed. Each resample draws N sentences with
+    replacement (the same draw for every seed), recomputes each seed's F1 from summed entity
+    counts (not the mean of per-sentence F1, which would weight a one-entity sentence like a
+    thirty-entity one) and averages the seeds. Returns {"micro_f1": [low, high], "macro_f1": [...]}.
     """
-    _check_inputs(gold, pred)
-    counts = _sentence_counts(gold, pred)
+    counts = []
+    for pred in preds:
+        _check_inputs(gold, pred)
+        counts.append(_sentence_counts(gold, pred))
     rng = np.random.default_rng(seed)
     scores = np.zeros((n, 2))
     for b in range(n):
         weights = np.bincount(rng.integers(0, len(gold), len(gold)), minlength=len(gold))
-        tp, n_pred, n_gold = np.tensordot(weights, counts, axes=(0, 0))
-        scores[b] = _f1_from_counts(tp, n_pred, n_gold)
+        scores[b] = np.mean([_f1_from_counts(*np.tensordot(weights, c, axes=(0, 0)))
+                             for c in counts], axis=0)
     low, high = np.percentile(scores, [2.5, 97.5], axis=0)
     return {"micro_f1": [float(low[0]), float(high[0])],
             "macro_f1": [float(low[1]), float(high[1])]}
+
+
+def bootstrap_ci(gold: Tags, pred: Tags, n: int = 1000, seed: int = 0) -> dict[str, list[float]]:
+    """95% bootstrap interval for one prediction set (see bootstrap_mean_ci)."""
+    return bootstrap_mean_ci(gold, [pred], n=n, seed=seed)
 
 
 def validate_preds(split: Sequence[dict[str, Any]],
