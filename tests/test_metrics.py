@@ -147,3 +147,19 @@ def test_validate_preds_reorders_and_rejects():
         metrics.validate_preds(RECORDS, [{"id": "s0", "pred": ["O"]}, *rows[1:]])
     with pytest.raises(ValueError, match="unknown labels"):
         metrics.validate_preds(RECORDS, [{"id": "s0", "pred": ["X"] * 4}, *rows[1:]])
+
+
+def test_bootstrap_mean_ci_matches_single_seed():
+    assert metrics.bootstrap_mean_ci(GOLD, [PRED], n=100) == metrics.bootstrap_ci(GOLD, PRED, n=100)
+    both = metrics.bootstrap_mean_ci(GOLD, [PRED, GOLD], n=100)
+    assert both["micro_f1"][0] > metrics.bootstrap_ci(GOLD, PRED, n=100)["micro_f1"][0]
+
+
+def test_benchmark_assert_same_detects_tampering():
+    import build_benchmark as bench
+    fresh = metrics.evaluate(GOLD, PRED)
+    stored = json.loads(json.dumps(fresh))
+    bench.assert_same(stored, fresh, "ok")  # identical numbers pass
+    stored["per_type"]["CLASS"]["f1"] = 0.5
+    with pytest.raises(ValueError, match="per_type/CLASS/f1"):
+        bench.assert_same(stored, fresh, "run")
