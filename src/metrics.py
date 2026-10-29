@@ -244,6 +244,21 @@ def validate_preds(split: Sequence[dict[str, Any]],
     return ordered
 
 
+def cohen_kappa(a: Sequence[str], b: Sequence[str]) -> float:
+    """Cohen's kappa between two annotators' labels for the same items.
+
+    kappa = (po - pe) / (1 - pe): po is the observed agreement, pe the agreement expected if
+    both annotators labelled independently with their own label frequencies. 1 is perfect
+    agreement, 0 is chance level. Returns nan when pe = 1 (both always give one label).
+    """
+    if len(a) != len(b) or not a:
+        raise ValueError("kappa needs two non-empty label lists of equal length")
+    n = len(a)
+    observed = sum(x == y for x, y in zip(a, b)) / n
+    expected = sum((a.count(c) / n) * (b.count(c) / n) for c in set(a) | set(b))
+    return (observed - expected) / (1 - expected) if expected < 1 else float("nan")
+
+
 def write_preds(model: str, seed: int, split: str, ids: Sequence[str],
                 preds: Tags) -> Path:
     """Write results/preds/<model>_seed<seed>_<split>.jsonl, one {"id", "pred"} per line."""

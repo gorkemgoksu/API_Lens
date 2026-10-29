@@ -163,3 +163,62 @@ def test_benchmark_assert_same_detects_tampering():
     stored["per_type"]["CLASS"]["f1"] = 0.5
     with pytest.raises(ValueError, match="per_type/CLASS/f1"):
         bench.assert_same(stored, fresh, "run")
+
+
+def test_cohen_kappa_hand_computed():
+    a, b = list("yynny"), list("ynnny")
+    # observed 4/5; expected 0.6*0.4 + 0.4*0.6 = 0.48; kappa = (0.8 - 0.48) / 0.52
+    assert metrics.cohen_kappa(a, b) == pytest.approx(0.32 / 0.52)
+    assert metrics.cohen_kappa(a, a) == 1.0
+    assert metrics.cohen_kappa(list("yyyy"), list("nnnn")) == pytest.approx(0.0)
+    with pytest.raises(ValueError):
+        metrics.cohen_kappa(["y"], ["y", "n"])
+
+
+def _synthetic_records():
+    types = ["FUNCTION", "METHOD", "CLASS", "MODULE", "ATTRIBUTE", "EXCEPTION"]
+    records = []
+    for i in range(400):
+        spans = []
+        if i % 2 == 0:  # half the sentences carry one entity; EXCEPTION is rare
+            etype = types[i % 5] if i % 20 else "EXCEPTION"
+            spans = [{"start": 0, "end": 1, "type": etype, "target": f"t{i}", "role": "obj"}]
+        records.append({"id": f"s{i}", "library": "x", "tokens": ["a", "b"], "spans": spans})
+    return records
+
+
+def test_audit_sample_is_stratified_and_reproducible():
+    import build_benchmark as bench
+    records = _synthetic_records()
+    picked = bench.audit_sample(records)
+    assert len(picked) == len(set(picked)) == 150
+    for etype in ("FUNCTION", "METHOD", "CLASS", "MODULE", "ATTRIBUTE", "EXCEPTION"):
+        assert sum(s["type"] == etype for i in picked for s in records[i]["spans"]) >= 15
+    assert picked == bench.audit_sample(records)  # same seed, same sample
+    rows = bench.audit_rows(records, picked)
+    assert sum(r["second"] for r in rows) == 50
+    few = bench.audit_sample(records[:30])  # only 1 EXCEPTION here: it is taken, not skipped
+    assert any(s["type"] == "EXCEPTION" for i in few for s in records[i]["spans"])
+    with pytest.raises(ValueError, match="no mentions"):
+        bench.audit_sample([r for r in records if not r["spans"]])
+
+
+def test_detokenize_and_report(tmp_path, monkeypatch, capsys):
+    import build_benchmark as bench
+    assert bench.detokenize(["Use", "f", "(", ")", "and", "(", "x", ")", "."]) == "Use f() and (x)."
+    header = ",".join(bench.AUDIT_COLUMNS)
+    first = [header] + [f"s{i},lib,t,a|CLASS; b|METHOD,{'y' if i % 4 else 'n'},"
+                        f"{'' if i % 4 else 1},{i % 2},ann,,{1 if i < 4 else 0}" for i in range(8)]
+    second = [header] + [f"s{i},lib,t,a|CLASS,{'y' if i % 2 else 'n'},{'' if i % 2 else 1},0,b,,1"
+                         for i in range(4)]
+    (tmp_path / "a.csv").write_text("\n".join(first) + "\n")
+    (tmp_path / "b.csv").write_text("\n".join(second) + "\n")
+    monkeypatch.setattr(bench, "AUDIT_FILE", tmp_path / "a.csv")
+    bench.audit_report(tmp_path / "b.csv")
+    out = capsys.readouterr().out
+    assert "Wrong-span rate: 2/16" in out          # two sentences with one wrong span each
+    assert "Missing mentions per 100 sentences: 50.00" in out
+    assert "Cohen's kappa on spans_ok over 4 shared sentences" in out
+    (tmp_path / "a.csv").write_text("\n".join(first[:1] + [first[2].replace(",y,", ",?,")]) + "\n")
+    with pytest.raises(ValueError, match="spans_ok must be y or n"):
+        bench.audit_report(tmp_path / "b.csv")
