@@ -49,6 +49,12 @@ All from `results/benchmark.csv` (columns `macro_f1`, `macro_f1_ci_low`, `macro_
 - The test splits were read only through `--final`.
 - Pull requests [#2](https://github.com/gorkemgoksu/API_Lens/pull/2), [#3](https://github.com/gorkemgoksu/API_Lens/pull/3) and [#15](https://github.com/gorkemgoksu/API_Lens/pull/15) were merged with "Rebase and merge", so the commits keep my name.
 
+## How I used AI tools
+
+- I used a coding assistant to draft and refine the metrics, benchmark aggregation, audit tooling, tests, figures, and this contribution record.
+- I checked generated work with hand-computed metric examples, seqeval comparisons, recomputation of stored results from prediction files, deliberate contract-failure tests, and visual inspection of the rendered figures.
+- No assistant output was accepted on its description alone; every published number was traced to versioned run artifacts and reproducible checks.
+
 ## Limitations and next steps
 
 - The audit is not finished at the time of writing, so wrong-span rate, missing mentions per 100 sentences and Cohen's kappa are not in this record yet. They will be added from `--audit-report`.
