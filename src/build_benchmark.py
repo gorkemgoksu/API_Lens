@@ -2,6 +2,7 @@
 
 Usage: python src/build_benchmark.py --final
        python src/build_benchmark.py --final --sample-audit
+       python src/build_benchmark.py --final --errors
        python src/build_benchmark.py --audit-report --second <second_annotator.csv>
 Without --final only the dev split is checked and nothing is written. With --final every stored
 number is recomputed from results/preds/ (a mismatch stops the script), then the CSVs and the SVG
@@ -9,6 +10,10 @@ figures in results/figures/ are written. Exit status 1 means some expected run i
 
 --sample-audit draws the 150 test sentences of the label audit into results/label_audit.csv
 (never overwrites an existing file); --audit-report summarises the filled file.
+
+--errors takes the best model by mean test macro-F1 in benchmark.csv, prints its seed-42 test
+type confusions and boundary errors, and dumps 20 seeded examples of the three largest error
+groups to /tmp/errors_<group>.txt.
 """
 
 from __future__ import annotations
@@ -17,6 +22,7 @@ import argparse
 import csv
 import json
 import sys
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -43,6 +49,8 @@ AUDIT_FILE = RESULTS / "label_audit.csv"
 AUDIT_SEED, AUDIT_SIZE, AUDIT_MIN_PER_TYPE, AUDIT_SECOND_SIZE = 7, 150, 15, 50
 AUDIT_COLUMNS = ["id", "library", "text", "gold_spans", "spans_ok", "wrong_spans",
                  "missing_mentions", "annotator", "notes", "second"]
+ERROR_SEED, ERROR_EXAMPLES, ERROR_TOP_CONFUSIONS, ERROR_SEED_RUN = 0, 20, 5, 42
+ERROR_GROUPS = ("type", "too_short", "too_long", "split", "merged", "missed", "spurious", "shifted")
 TOLERANCE = 1e-9
 CSV_DIGITS = 4
 
@@ -390,6 +398,116 @@ def audit_report(second_path: Path) -> None:
           f"(raw agreement {agree:.4f})")
 
 
+def best_model_on_test(path: Path = RESULTS / "benchmark.csv") -> str:
+    """Model with the highest mean test macro-F1 in benchmark.csv."""
+    with path.open(newline="", encoding="utf-8") as handle:
+        scores = {r["model"]: float(r["macro_f1"]) for r in csv.DictReader(handle)
+                  if r["split"] == "test"}
+    return max(scores, key=scores.get)
+
+
+def _overlap(a: tuple[str, int, int], b: tuple[str, int, int]) -> bool:
+    return a[1] < b[2] and b[1] < a[2]
+
+
+def _sentence_errors(sent: int, gold: list[tuple], pred: list[tuple]) -> list[dict[str, Any]]:
+    """Error events of one sentence; boundary groups ignore the type, 'type' needs equal boundaries."""
+    events: list[dict[str, Any]] = []
+
+    def add(group: str, **extra: Any) -> None:
+        events.append({"group": group, "sent": sent, **extra})
+
+    gold_at = {(s, e): t for t, s, e in gold}
+    pred_at = {(s, e): t for t, s, e in pred}
+    for (s, e), t in sorted(gold_at.items()):
+        if (s, e) in pred_at and pred_at[(s, e)] != t:
+            add("type", pair=(t, pred_at[(s, e)]))
+    open_gold = [g for g in gold if (g[1], g[2]) not in pred_at]
+    open_pred = [p for p in pred if (p[1], p[2]) not in gold_at]
+    merged_gold: set[tuple] = set()
+    for p in open_pred:
+        hit = [g for g in open_gold if _overlap(g, p)]
+        if len(hit) >= 2:
+            add("merged")
+            merged_gold.update(hit)
+    for g in open_gold:
+        if g in merged_gold:
+            continue
+        hit = [p for p in open_pred if _overlap(g, p)]
+        if not hit:
+            add("missed")
+        elif len(hit) >= 2:
+            add("split")
+        elif hit[0][1] >= g[1] and hit[0][2] <= g[2]:
+            add("too_short")
+        elif hit[0][1] <= g[1] and hit[0][2] >= g[2]:
+            add("too_long")
+        else:
+            add("shifted")
+    for p in open_pred:
+        if not any(_overlap(g, p) for g in open_gold):
+            add("spurious")
+    return events
+
+
+def find_errors(gold: list[list[str]], pred: list[list[str]]) -> list[dict[str, Any]]:
+    """All error events over a split, ordered by sentence."""
+    by_sent: dict[str, dict[int, list[tuple]]] = {"gold": {}, "pred": {}}
+    for name, tags in (("gold", gold), ("pred", pred)):
+        for sent, etype, start, end in sorted(metrics.entity_set(tags)):
+            by_sent[name].setdefault(sent, []).append((etype, start, end))
+    events: list[dict[str, Any]] = []
+    for sent in sorted(by_sent["gold"].keys() | by_sent["pred"].keys()):
+        events += _sentence_errors(sent, by_sent["gold"].get(sent, []), by_sent["pred"].get(sent, []))
+    return events
+
+
+def _spans_text(tokens: list[str], spans: list[tuple]) -> str:
+    return "; ".join(f"{''.join(tokens[s:e])}|{t} [{s}:{e}]" for t, s, e in spans) or "-"
+
+
+def dump_examples(group: str, events: list[dict], records: list[dict], gold: list[list[str]],
+                  pred: list[list[str]]) -> Path:
+    """Write seeded example sentences of one error group to /tmp/errors_<group>.txt."""
+    rng = np.random.default_rng(ERROR_SEED)
+    picked = sorted(rng.choice(len(events), min(ERROR_EXAMPLES, len(events)), replace=False))
+    blocks = []
+    for k in picked:
+        sent = events[k]["sent"]
+        tokens = records[sent]["tokens"]
+        gold_spans = sorted((t, s, e) for _, t, s, e in metrics.entity_set([gold[sent]]))
+        pred_spans = sorted((t, s, e) for _, t, s, e in metrics.entity_set([pred[sent]]))
+        blocks.append(f"{records[sent]['id']}\n  text: {detokenize(tokens)}\n"
+                      f"  gold: {_spans_text(tokens, gold_spans)}\n"
+                      f"  pred: {_spans_text(tokens, pred_spans)}\n")
+    path = Path("/tmp") / f"errors_{group}.txt"
+    path.write_text("\n".join(blocks), encoding="utf-8")
+    return path
+
+
+def error_report() -> None:
+    """Print the error tables of the best model (seed 42, test) and dump examples to /tmp."""
+    best = best_model_on_test()
+    records = load_split("test", final=True)
+    gold = [r["tags"] for r in records]
+    pred = load_preds(best, ERROR_SEED_RUN, "test", records)
+    events = find_errors(gold, pred)
+    print(f"Error analysis: {NAMES[best]}, seed {ERROR_SEED_RUN}, test ({len(records)} sentences, "
+          f"{len(metrics.entity_set(gold))} gold spans)\n")
+    pairs = Counter(e["pair"] for e in events if e["group"] == "type")
+    print(f"Top {ERROR_TOP_CONFUSIONS} type confusions (exact boundaries, gold -> predicted):")
+    for (g, p), n in pairs.most_common(ERROR_TOP_CONFUSIONS):
+        print(f"  {g:<10} -> {p:<10} {n:>5}")
+    counts = Counter(e["group"] for e in events)
+    print("\nError groups (merged counts predicted spans, spurious predicted spans, the rest "
+          "gold spans):")
+    for group in ERROR_GROUPS:
+        print(f"  {group:<10} {counts[group]:>5}")
+    for group, _ in counts.most_common(3):
+        group_events = [e for e in events if e["group"] == group]
+        print(f"wrote {dump_examples(group, group_events, records, gold, pred)}")
+
+
 def parse_args() -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description=__doc__,
@@ -398,6 +516,8 @@ def parse_args() -> argparse.Namespace:
                         help="read the test splits, verify them and write CSVs and figures")
     parser.add_argument("--sample-audit", action="store_true",
                         help="with --final: write results/label_audit.csv (150 test sentences)")
+    parser.add_argument("--errors", action="store_true",
+                        help="with --final: print the best model's test errors, dump examples to /tmp")
     parser.add_argument("--audit-report", action="store_true",
                         help="print wrong-span rate, missing mentions and Cohen's kappa")
     parser.add_argument("--second", type=Path,
@@ -412,6 +532,11 @@ def main() -> int:
         if not args.final:
             raise SystemExit("--sample-audit reads the test split and needs --final")
         sample_audit()
+        return 0
+    if args.errors:
+        if not args.final:
+            raise SystemExit("--errors reads the test split and needs --final")
+        error_report()
         return 0
     if args.audit_report:
         if args.second is None:
