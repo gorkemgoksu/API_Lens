@@ -222,3 +222,19 @@ def test_detokenize_and_report(tmp_path, monkeypatch, capsys):
     (tmp_path / "a.csv").write_text("\n".join(first[:1] + [first[2].replace(",y,", ",?,")]) + "\n")
     with pytest.raises(ValueError, match="spans_ok must be y or n"):
         bench.audit_report(tmp_path / "b.csv")
+
+
+def test_find_errors_groups_each_kind_once():
+    import build_benchmark as bench
+    rows = [("B-CLASS I-CLASS I-CLASS", "B-CLASS I-CLASS O"),      # too short
+            ("B-CLASS I-CLASS O", "B-CLASS I-CLASS I-CLASS"),      # too long
+            ("B-CLASS I-CLASS I-CLASS", "B-CLASS O B-CLASS"),      # split
+            ("B-CLASS B-CLASS O", "B-CLASS I-CLASS O"),            # merged
+            ("B-CLASS O O", "O O O"),                              # missed
+            ("O O O", "B-METHOD O O"),                             # spurious
+            ("B-CLASS I-CLASS O", "B-FUNCTION I-FUNCTION O")]      # type
+    gold, pred = ([r[i].split() for r in rows] for i in (0, 1))
+    events = bench.find_errors(gold, pred)
+    assert [e["group"] for e in events] == ["too_short", "too_long", "split", "merged",
+                                            "missed", "spurious", "type"]
+    assert events[-1]["pair"] == ("CLASS", "FUNCTION")
