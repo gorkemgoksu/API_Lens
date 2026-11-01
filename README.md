@@ -88,7 +88,7 @@ ModernBERT uses lr 8e-5, chosen once on dev from {3e-5, 5e-5, 8e-5} with seed 42
 
 ## Results
 
-All numbers come from [`results/benchmark.csv`](results/benchmark.csv), produced by `python src/build_benchmark.py --final`, which recomputes every stored score from the prediction files and stops on any mismatch. Macro-F1 is the mean over the six types (strict, IOB2); ± is the standard deviation over seeds; the interval is a 95% bootstrap CI over test sentences.
+All numbers come from [`results/benchmark.csv`](results/benchmark.csv), produced by `python src/build_benchmark.py --final`, which recomputes every stored score from the prediction files and stops on any mismatch. Macro-F1 is the unweighted mean over the entity types with gold support in that split (strict, IOB2); ± is the standard deviation over seeds; the interval is a 95% bootstrap CI over test sentences.
 
 | Model | Seeds | Test macro-F1 | 95% CI | Test micro-F1 | Heldout macro-F1 | Test no-"()" macro-F1 | Unseen-target recall | Invalid IOB2 rate |
 |---|---|---|---|---|---|---|---|---|
@@ -104,7 +104,7 @@ All numbers come from [`results/benchmark.csv`](results/benchmark.csv), produced
 
 **What the results say**
 
-1. **The ladder holds in-distribution.** Pre-training plus a CRF head is best on every regime. A CRF head adds about 0.02 test macro-F1 to ModernBERT and removes all invalid IOB2 output (0.0239 → 0).
+1. **Pre-training plus a CRF head leads.** ModernBERT-CRF is best in-distribution and on every other regime. Its CRF head adds about 0.02 test macro-F1 over ModernBERT and removes all invalid IOB2 output (0.0239 → 0).
 2. **An unseen library is the real challenge.** Every model loses a lot on PyTorch. The learned models without pre-training fall below the hand-written rules (Rules 0.441 vs CRF 0.171, BiLSTM-CRF 0.309); only ModernBERT beats them.
 3. **Models lean on "()".** Removing the parentheses costs every model test macro-F1, from 0.043 (HMM) and 0.065 (ModernBERT-CRF) up to 0.277 for the Rules baseline, which depends on them by design.
 4. **Unseen targets.** Recall on test mentions whose target never occurs in train is 0.675 at best.
@@ -153,6 +153,7 @@ On an answer that mixes real calls with invented ones, `DataFrame.smart_merge()`
 - **Single seed** for ablations, deterministic models and the error analysis.
 - **Decoding:** crfsuite decodes without the IOB2 masks (invalid IOB2 rate 0.0005 on dev, 0 on the final test splits).
 - **Hardware differs** between model families, so training times are only indicative.
+- **Final-test scope:** test sentences were read only after all dev-based choices and final runs, so no iterative test feedback was used; the conclusions still rely on one frozen test set.
 
 ## Repository structure
 
