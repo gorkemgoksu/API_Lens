@@ -50,4 +50,4 @@ APILens deterministically turns version-pinned documentation into 16,796 leak-fr
 - Only mentions explicitly marked by upstream documentation authors can receive entity positions; unmarked mentions can remain unlabeled.
 - Changelog-heavy libraries contain short release-note and issue-title language even after cleaning.
 - Inventory and documentation versions must remain aligned; changing either requires a new dataset version and rerunning final experiments.
-- I will independently audit the 50 shared sentences marked `second=1` after the label-audit sample is generated.
+- I independently audited the 50 shared sentences marked `second=1` without seeing the first annotator's answers.

@@ -57,9 +57,9 @@ All from `results/benchmark.csv` (columns `macro_f1`, `macro_f1_ci_low`, `macro_
 
 ## Limitations and next steps
 
-- The audit is not finished at the time of writing, so wrong-span rate, missing mentions per 100 sentences and Cohen's kappa are not in this record yet. They will be added from `--audit-report`.
+- The audit and error analysis were completed by Mert Tomak after I had to travel; Görkem Veysel Göksu served as the second annotator for the 50 shared sentences.
 - Bootstrap intervals resample sentences as if independent, but sentences from one page are correlated, so the intervals are probably too narrow. Rules, HMM and CRF have one run each, so their intervals show sentence sampling only, not seed variance.
 - Heldout macro-F1 averages five types (no EXCEPTION) and ATTRIBUTE has 6 mentions, so it is noisy.
 - The CRF and BiLSTM-CRF test intervals overlap, so the data do not show which of the two is better.
 - The `hmm-nomask` and `hmm` predictions are identical because the smoothed transitions never select an illegal step; `invalid_iob2_rate` is 0.0 for `hmm-nomask` on all four splits.
-- Next: finish the audit and the error analysis (`results/error_analysis.md`), then give the numbers to the README.
+- The final audit and error-analysis results are documented in `README.md` and `results/error_analysis.md`.
