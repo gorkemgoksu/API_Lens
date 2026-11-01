@@ -86,18 +86,18 @@ Boundary errors are almost absent. The errors are wrong types (72), missed menti
 | 0.8507, 3 seeds | `results/benchmark.csv`, row modernbert_crf / test (`macro_f1`, `n_seeds`) |
 | 0.7865 | `results/benchmark.csv`, row modernbert_crf / test_noparen (`macro_f1`) |
 | 0.0642 | 0.8507 - 0.7865 |
-| 1630 sentences, 1695 gold spans | `/tmp/errors_report.txt`, line 1 |
-| Confusion counts 12, 12, 11, 8, 8 | `/tmp/errors_report.txt`, lines 4-8 |
-| Group counts 72, 1, 0, 0, 0, 109, 153, 0 | `/tmp/errors_report.txt`, lines 11-18 |
+| 1630 sentences, 1695 gold spans | `--errors` output (header) |
+| Confusion counts 12, 12, 11, 8, 8 | `--errors` output (type confusions) |
+| Group counts 72, 1, 0, 0, 0, 109, 153, 0 | `--errors` output (error groups) |
 | 23 | 12 + 11 |
 | 20 of the 72 | 12 + 8 |
-| 20 examples per group, seed 0 | task description |
-| Classification counts (10/5/5, 14/0/6, 5/12/3) | `/tmp/error_labels.csv`, `label` column counted per group |
-| 3 of 20 (classes with `()`) | `/tmp/error_labels.csv`, type 18, 19, 20 |
-| 3 ambiguous (hexbin, pivot, outer) | `/tmp/error_labels.csv`, type 3, 14, 7 |
-| 2 model (mask, where) | `/tmp/error_labels.csv`, type 15, 16 |
-| 3 noise (filled, compressed, random) | `/tmp/error_labels.csv`, type 8, 9, 12 |
-| Alias and ufunc typed ATTRIBUTE; distribution object | `/tmp/error_labels.csv`, type 4, 5, 17 |
-| 12 of 20, 5 of 20, 3 of 20 (spurious) | `/tmp/error_labels.csv`, spurious rows by label |
-| 1 of 20 (merged across dot) | `/tmp/error_labels.csv`, spurious 11 |
-| 14 of 20, 6 ambiguous (missed) | `/tmp/error_labels.csv`, missed rows by label |
+| 20 examples per group, seed 0 | `src/build_benchmark.py --errors` |
+| Classification counts (10/5/5, 14/0/6, 5/12/3) | `results/error_labels.csv`, `label` column counted per group |
+| 3 of 20 (classes with `()`) | `results/error_labels.csv`, type 18, 19, 20 |
+| 3 ambiguous (hexbin, pivot, outer) | `results/error_labels.csv`, type 3, 14, 7 |
+| 2 model (mask, where) | `results/error_labels.csv`, type 15, 16 |
+| 3 noise (filled, compressed, random) | `results/error_labels.csv`, type 8, 9, 12 |
+| Alias and ufunc typed ATTRIBUTE; distribution object | `results/error_labels.csv`, type 4, 5, 17 |
+| 12 of 20, 5 of 20, 3 of 20 (spurious) | `results/error_labels.csv`, spurious rows by label |
+| 1 of 20 (merged across dot) | `results/error_labels.csv`, spurious 11 |
+| 14 of 20, 6 ambiguous (missed) | `results/error_labels.csv`, missed rows by label |
