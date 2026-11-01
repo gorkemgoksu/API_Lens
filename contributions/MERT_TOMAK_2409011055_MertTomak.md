@@ -7,6 +7,8 @@
 - [`src/train_transformer.py`](../src/train_transformer.py): ModernBERT-base fine-tuning with a softmax head (`modernbert`) or the same CRF layer (`modernbert_crf`), both reading scores at the first sub-token of each word. It also contains the learning-rate sweep (`--lr-sweep`).
 - [`src/hallucination_check.py`](../src/hallucination_check.py): demo that tags API mentions in a text file with a saved BiLSTM-CRF checkpoint and looks each one up in the local Sphinx inventories (FOUND, NOT FOUND or AMBIGUOUS, plus whether the inventory type agrees).
 - The neural final runs: `bilstm_crf`, `modernbert` and `modernbert_crf` with seeds 13, 42 and 2026, and the two BiLSTM ablations with seed 42.
+- Work taken over from Zeynep Çelik when she had to travel: the first-annotator pass of the label audit ([`results/label_audit.csv`](../results/label_audit.csv), all 150 sentences), the `--errors` option of [`src/build_benchmark.py`](../src/build_benchmark.py) with one test, and [`results/error_analysis.md`](../results/error_analysis.md) with the 60 classified examples ([`results/error_labels.csv`](../results/error_labels.csv)).
+- [`README.md`](../README.md) and [`LICENSE`](../LICENSE).
 
 ## Key decisions and why
 
@@ -32,6 +34,9 @@ Dev macro-F1 only, read from `results/<run>.json` under `splits.dev.macro_f1`. T
 - Invalid IOB2 rate on dev (`splits.dev.invalid_iob2_rate`): 0.0 for every CRF run, 0.038 for `bilstm-softmax`, and 0.0216 to 0.0226 for the three `modernbert` runs.
 - Lr sweep (softmax head, seed 42, dev macro-F1): 3e-5 0.8256, 5e-5 0.8512, 8e-5 0.8691, as stated in [PR #12](https://github.com/gorkemgoksu/API_Lens/pull/12). The 8e-5 value equals `modernbert_seed42.json`, `splits.dev.macro_f1`; the other two were only printed to the console and are not stored in a result file.
 
+- Label audit (first annotator, 150 test sentences; `python src/build_benchmark.py --audit-report --second results/label_audit_second.csv`): 6 of 169 marked spans wrong (0.0355), 6 of 150 sentences with a wrong span, 15.33 unmarked API mentions per 100 sentences. On the 50 sentences shared with the second annotator we agreed on all 50 spans_ok answers, so Cohen's kappa is undefined; on the same 50 sentences I counted 6 unmarked mentions and the second annotator 15.
+- Error analysis classification (`results/error_labels.csv`): model error / label noise / ambiguous = 10/5/5 (type), 14/0/6 (missed), 5/12/3 (spurious).
+
 ## How I verified the work
 
 - `tests/test_viterbi.py` checks that the CRF log-partition equals a brute-force log-sum-exp over all tag paths, with and without the IOB2 masks.
@@ -47,6 +52,9 @@ Dev macro-F1 only, read from `results/<run>.json` under `splits.dev.macro_f1`. T
 - Reviewer feedback from teammates was applied before merge; no assistant output was accepted on its own description.
 - The first CRF draft passed only the transition mask to `viterbi()`. A teammate's review on [PR #1](https://github.com/gorkemgoksu/API_Lens/pull/1) caught the missing start mask, and I fixed it with a regression test that forces a 1e6 `I-FUNCTION` score on the first token.
 - Checks I relied on instead of the assistant's description: the brute-force log-partition test, two identical same-seed runs per model, and comparing prediction counts with split sizes before committing results.
+- Label audit: the assistant wrote a temporary input helper (outside the repository), explained the API objects I asked about and pointed out names that might be unmarked mentions; I made the final y/n and count decision for each of the 150 sentences.
+- Error analysis: the 60 sampled errors were classified with the assistant proposing a class for each example under written rules; I read every example and accepted or changed the proposal. The rules are listed in `results/error_analysis.md`.
+- The README was drafted with the assistant from `results/benchmark.csv`, `results/ablations.csv`, `data/processed/stats.json` and the audit files; I checked every number against those files.
 
 ## Limitations and next steps
 
@@ -54,4 +62,5 @@ Dev macro-F1 only, read from `results/<run>.json` under `splits.dev.macro_f1`. T
 - The learning rate was tuned with the softmax head only and reused for the CRF head.
 - BiLSTM-CRF and ModernBERT ran on different hardware, so the reported training times are not comparable.
 - The hallucination demo checks names against the local inventories only; it cannot judge whether a real name is used correctly, and it is not an evaluated result.
+- The error-analysis classification has one annotator and 20 examples per group.
 - Next: store the lr sweep table in a result file, and run the ablations with all three seeds if time allows.
